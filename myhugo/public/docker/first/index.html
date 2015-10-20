@@ -1,0 +1,85 @@
+	<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
+<head>
+  <link href="http://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+  <meta name="generator" content="Hugo 0.14" />
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+
+  <title> first &middot; My New Hugo Site </title>
+
+  
+  <link rel="stylesheet" href="http://106.186.127.250:1313/css/poole.css">
+  <link rel="stylesheet" href="http://106.186.127.250:1313/css/syntax.css">
+  <link rel="stylesheet" href="http://106.186.127.250:1313/css/hyde.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=PT+Sans:400,400italic,700|Abril+Fatface">
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="/favicon.png">
+
+  
+  <link href="" rel="alternate" type="application/rss+xml" title="My New Hugo Site" />
+</head>
+
+	<body class="">
+		<div class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <a href="http://106.186.127.250:1313/"><h1>My New Hugo Site</h1></a>
+      <p class="lead">
+      An elegant open source and mobile first theme for <a href="http://hugo.spf13.com">hugo</a> made by <a href="http://twitter.com/mdo">@mdo</a>. Originally made for Jekyll.
+      </p>
+    </div>
+
+    <ul class="sidebar-nav">
+      <li><a href="/">Home</a> </li>
+      
+    </ul>
+
+    <p>&copy; 2015. All rights reserved. </p>
+  </div>
+</div>
+
+
+		<div class="content container">
+			<div class="post">
+			 	<h1>first</h1>
+			  <span class="post-date">Tue, Oct 20, 2015</span>
+			      <p>###首先启动docker
+看到一个可耐的鲸鱼，下面有docker地址，如下语句</p>
+
+<pre><code>docker is configured to use the default machine with IP 192.168.99.100
+For help getting started, check out the docs at https://docs.docker.com
+</code></pre>
+
+<p>注意里面的ip，这是docker主机的ip，后面连接container的时候需要通过docker主机的端口转发过去</p>
+
+<p>下面是查找、下载、导出镜像用到的语句</p>
+
+<pre><code>docker search golang   查找镜像
+docker  pull golang:1.4.2
+docker save -o go-1.4.img golang:1.4.2   导出镜像
+</code></pre>
+
+<p>###开始一个container
+    docker run -it -p 10101:8080 -v <code>pwd</code>/code/go/src/:/go/src/:rw golang:1.4.2 go run /go/src/myLab/golang/gin/main.go
+- -p进行端口转发，docker主机10101 转发到container的8080（gin server端口）
+- -v进行挂载（绝对路径），机器的·pwd·/code/go/src,挂在的container的/go/src。注意依赖
+- 加-d后台运行
+Docker ip is 10101   这个端口被转发到container的8080</p>
+
+<p>这样即可跑起来，可curl请求docker主机端口，转发到container进行访问</p>
+
+<pre><code>curl 192.168.99.100:10101/room/
+</code></pre>
+
+			</div>
+
+			
+		</div>
+
+  </body>
+</html>

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>My New Hugo Site</title>
+    <link>http://106.186.127.250:1313/</link>
+    <description>Recent content on My New Hugo Site</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    <lastBuildDate>Tue, 20 Oct 2015 16:31:14 +0800</lastBuildDate>
+    <atom:link href="http://106.186.127.250:1313/index.xml" rel="self" type="application/rss+xml" />
+    
+    <item>
+      <title>first</title>
+      <link>http://106.186.127.250:1313/docker/first/</link>
+      <pubDate>Tue, 20 Oct 2015 16:31:14 +0800</pubDate>
+      
+      <guid>http://106.186.127.250:1313/docker/first/</guid>
+      <description>&lt;p&gt;###首先启动docker
+看到一个可耐的鲸鱼，下面有docker地址，如下语句&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;docker is configured to use the default machine with IP 192.168.99.100
+For help getting started, check out the docs at https://docs.docker.com
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;注意里面的ip，这是docker主机的ip，后面连接container的时候需要通过docker主机的端口转发过去&lt;/p&gt;
+
+&lt;p&gt;下面是查找、下载、导出镜像用到的语句&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;docker search golang   查找镜像
+docker  pull golang:1.4.2
+docker save -o go-1.4.img golang:1.4.2   导出镜像
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;###开始一个container
+    docker run -it -p 10101:8080 -v &lt;code&gt;pwd&lt;/code&gt;/code/go/src/:/go/src/:rw golang:1.4.2 go run /go/src/myLab/golang/gin/main.go
+- -p进行端口转发，docker主机10101 转发到container的8080（gin server端口）
+- -v进行挂载（绝对路径），机器的·pwd·/code/go/src,挂在的container的/go/src。注意依赖
+- 加-d后台运行
+Docker ip is 10101   这个端口被转发到container的8080&lt;/p&gt;
+
+&lt;p&gt;这样即可跑起来，可curl请求docker主机端口，转发到container进行访问&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;curl 192.168.99.100:10101/room/
+&lt;/code&gt;&lt;/pre&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>about</title>
+      <link>http://106.186.127.250:1313/about/</link>
+      <pubDate>Tue, 20 Oct 2015 16:30:09 +0800</pubDate>
+      
+      <guid>http://106.186.127.250:1313/about/</guid>
+      <description></description>
+    </item>
+    
+  </channel>
+</rss>
