@@ -53,20 +53,444 @@ docker save -o go-1.4.img golang:1.4.2   导出镜像
     </item>
     
     <item>
-      <title>about</title>
-      <link>http://106.186.127.250:1313/about/</link>
+      <title>一个函数解决http发送</title>
+      <link>http://106.186.127.250:1313/golang/%E4%B8%80%E8%A1%8C%E5%87%BD%E6%95%B0%E8%A7%A3%E5%86%B3http%E5%8F%91%E9%80%81/</link>
       <pubDate>Tue, 20 Oct 2015 16:30:09 +0800</pubDate>
       
-      <guid>http://106.186.127.250:1313/about/</guid>
-      <description></description>
+      <guid>http://106.186.127.250:1313/golang/%E4%B8%80%E8%A1%8C%E5%87%BD%E6%95%B0%E8%A7%A3%E5%86%B3http%E5%8F%91%E9%80%81/</guid>
+      <description>
+
+&lt;p&gt;golang发送http请求，是用Net/http包处理。http发送请求，其实都是由client.Do这个函数处理的。其他发送函数比如 Post、PostForm、Get函数，都是经过处理后调用client.DO进行处理。所以我们其实可以经过利用一个函数处理所有常用的发送请求。
+附：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;#生成请求
+func NewRequest(method, urlStr string, body io.Reader) (*Request, error)
+#执行http请求
+func (c *Client) Do(req *Request) (resp *Response, err error)
+#生成带有超时的client（其他参数请自行google）
+client := &amp;amp;http.Client{Timeout: time.Duration(TimeoutDuration)}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h1 id=&#34;body参数形式-raw-form:6fbea2521e0bea875cffa974326c19fb&#34;&gt;body参数形式&amp;ndash;raw/form&lt;/h1&gt;
+
+&lt;p&gt;http中 form|raw的post，其实只是一个头文件的区别，本质都是body中的字符串。form只是编码之后，放进body。比raw的多了两步骤：编码+加header&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;type Check struct {
+        Timeout    time.Duration `json:&amp;quot;timeout&amp;quot;`
+        Method     string        `json:&amp;quot;measurement_type&amp;quot;`
+        Url        string
+        PostBody   string
+        BodyType   string `json:&amp;quot;body_type&amp;quot;`
+        Result     QueryResult
+}
+
+func (check *Check) Post() error {
+        TimeoutDuration := time.Duration(check.Timeout) * time.Second
+        client := &amp;amp;http.Client{Timeout: time.Duration(TimeoutDuration)}
+        queryHeader := &amp;quot;&amp;quot;
+        if check.BodyType == &amp;quot;form&amp;quot; {
+                queryHeader = &amp;quot;application/x-www-form-urlencoded&amp;quot;
+        } else if check.BodyType != &amp;quot;raw&amp;quot; {
+                return errors.New(&amp;quot;Unkown body type&amp;quot;)
+        }
+        res, err := client.Post(check.Url, queryHeader, strings.NewReader(check.PostBody))
+        if err != nil {
+                return err
+        }
+        defer res.Body.Close()
+        check.Result.Status = res.StatusCode
+        check.Result.Body, err = ioutil.ReadAll(res.Body)
+        return err
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;如下面调用   第一个例子提交form的时候，提交编码后的string放进body并加头，跟body的post是完全一样的。&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;tmpForm := `tstring=xxx&amp;amp;tint=1`
+testCheck = &amp;amp;check.Check{Url: &amp;quot;http://127.0.0.1:8080/room2/&amp;quot;, Timeout: 3, Method: &amp;quot;POST&amp;quot;, BodyType: &amp;quot;form&amp;quot;, PostBody: tmpForm}
+err = testCheck.DoQuery()
+if err != nil {
+        t.Error(&amp;quot;failed when get form query&amp;quot;, testCheck)
+}
+
+tmpJson := `{&amp;quot;tstring&amp;quot;: &amp;quot;x&amp;quot;, &amp;quot;tint&amp;quot;: 1}`
+testCheck = &amp;amp;check.Check{Url: &amp;quot;http://127.0.0.1:8080/room1/&amp;quot;, Timeout: 3, Method: &amp;quot;POST&amp;quot;, BodyType: &amp;quot;raw&amp;quot;, PostBody: tmpJson}
+err = testCheck.DoQuery()
+if err != nil {
+        t.Error(&amp;quot;failed when get json query&amp;quot;, testCheck)
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h1 id=&#34;汇总-一个函数解决所有http请求:6fbea2521e0bea875cffa974326c19fb&#34;&gt;汇总：一个函数解决所有http请求&lt;/h1&gt;
+
+&lt;pre&gt;&lt;code&gt;type HttpQuery struct {
+        Timeout  int
+        Method   string
+        Url      string
+        BodyType string
+        Body     []byte
+        Result   HttpResult
+}
+
+type HttpResult struct {
+        Status int
+        Body   []byte
+}
+
+func (query *HttpQuery) DoQuery() error {
+        url, _ := url.Parse(query.Url)
+        TimeoutDuration := time.Duration(query.Timeout) * time.Second
+        client := &amp;amp;http.Client{Timeout: time.Duration(TimeoutDuration)}
+        req, _ := http.NewRequest(query.Method, url.String(), bytes.NewBufferString(string(query.Body)))
+
+        if query.Method != &amp;quot;GET&amp;quot; {
+                queryHeader := &amp;quot;&amp;quot;
+                if query.BodyType == &amp;quot;form&amp;quot; {
+                        queryHeader = &amp;quot;application/x-www-form-urlencoded&amp;quot;
+                } else if query.BodyType != &amp;quot;raw&amp;quot; {
+                        return errors.New(&amp;quot;Unkown body type&amp;quot;)
+                }
+                req.Header.Set(&amp;quot;Content-Type&amp;quot;, queryHeader)
+        }
+        res, err := client.Do(req)
+        if err != nil {
+                return err
+        }
+        defer res.Body.Close()
+
+        query.Result.Status = res.StatusCode
+        query.Result.Body, err = ioutil.ReadAll(res.Body)
+        if err != nil {
+                return errors.New(&amp;quot;error in read post body&amp;quot;)
+        }
+        return nil
+}
+&lt;/code&gt;&lt;/pre&gt;
+</description>
     </item>
     
     <item>
-      <title>about</title>
-      <link>http://106.186.127.250:1313/%E7%94%9F%E6%B4%BB/first/</link>
+      <title>【原创】无缓存channel及日常用法</title>
+      <link>http://106.186.127.250:1313/golang/%E6%97%A0%E7%BC%93%E5%AD%98channel%E5%8F%8A%E5%B8%B8%E7%94%A8%E6%B3%95/</link>
       <pubDate>Tue, 20 Oct 2015 16:30:09 +0800</pubDate>
       
-      <guid>http://106.186.127.250:1313/%E7%94%9F%E6%B4%BB/first/</guid>
+      <guid>http://106.186.127.250:1313/golang/%E6%97%A0%E7%BC%93%E5%AD%98channel%E5%8F%8A%E5%B8%B8%E7%94%A8%E6%B3%95/</guid>
+      <description>
+
+&lt;h5 id=&#34;当没有对channel读取的操作的时候-发送操作会阻塞-看下面例子:aa1780b59ea5c50d8457e0a0fcd09cd3&#34;&gt;当没有对channel读取的操作的时候，发送操作会阻塞。看下面例子&lt;/h5&gt;
+
+&lt;pre&gt;&lt;code&gt;package main
+import (
+&amp;quot;fmt&amp;quot;
+&amp;quot;time&amp;quot;
+)
+
+var (
+    messages = make(chan string)//无缓存channel
+    signals = make(chan bool)//无缓存channel
+)
+
+func res(cs chan string) {
+    fmt.Println(&amp;quot;begin listin...&amp;quot;)
+    for {
+       msg := &amp;lt;-cs//监听channel
+       fmt.Println(&amp;quot;received message&amp;quot;, msg)
+    }
+}
+
+func main() {
+    go res(messages)//监听channel
+    time.Sleep(1 * 1e9)// 注释掉这句，就send fail，执行default。，为啥
+
+    msg := &amp;quot;hi 2005&amp;quot;
+    select {
+    case messages &amp;lt;- msg:
+        fmt.Println(&amp;quot;sent message&amp;quot;, msg)
+    default:
+        fmt.Println(&amp;quot;no message sent&amp;quot;)
+    }
+
+    select {
+    case msg := &amp;lt;-messages:
+        fmt.Println(&amp;quot;received message&amp;quot;, msg)
+    case sig := &amp;lt;-signals:
+        fmt.Println(&amp;quot;received signal&amp;quot;, sig)
+    default:
+        fmt.Println(&amp;quot;no activity&amp;quot;)
+    }
+time.Sleep(1 * 1e9)
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h5 id=&#34;close-channel:aa1780b59ea5c50d8457e0a0fcd09cd3&#34;&gt;close channel&lt;/h5&gt;
+
+&lt;p&gt;表明没有数据再发往通道了（任务完成）。这对于channel接受者是一个信号，可以被用来表明任务完成。&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;package main
+import &amp;quot;fmt&amp;quot;
+func main() {
+jobs := make(chan int, 5)
+done := make(chan bool)
+    go func() {
+    for {
+        j, more := &amp;lt;-jobs
+        if more {
+            fmt.Println(&amp;quot;received job&amp;quot;, j)
+        } else {
+            fmt.Println(&amp;quot;received all jobs&amp;quot;)
+            done &amp;lt;- true
+            return
+        }
+    }
+}()
+    for j := 1; j &amp;lt;= 3; j++ {
+    jobs &amp;lt;- j
+    fmt.Println(&amp;quot;sent job&amp;quot;, j)
+}
+close(jobs)
+fmt.Println(&amp;quot;sent all jobs&amp;quot;)
+    &amp;lt;-done
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;结果：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ go run closing-channels.go 
+sent job 1
+received job 1
+sent job 2
+received job 2
+sent job 3
+received job 3
+sent all jobs
+received all jobs
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h5 id=&#34;range-over-channel:aa1780b59ea5c50d8457e0a0fcd09cd3&#34;&gt;Range over channel&lt;/h5&gt;
+
+&lt;p&gt;range channle之前，需要close掉channel，否则会hang住&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;package main
+import &amp;quot;fmt&amp;quot;
+func main() {
+    queue := make(chan string, 2)
+queue &amp;lt;- &amp;quot;one&amp;quot;
+queue &amp;lt;- &amp;quot;two&amp;quot;
+        //This range iterates over each element as it’s received fromqueue. 
+        //Because we closed the channel above, the iteration terminates after receiving the 2 elements. 
+        //If we didn’tclose it we’d block on a 3rd receive in the loop.
+    close(queue)
+    for elem := range queue {
+    fmt.Println(elem)
+}
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;结果：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ go run range-over-channels.go
+one
+two
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h5 id=&#34;生产者-消费者:aa1780b59ea5c50d8457e0a0fcd09cd3&#34;&gt;生产者+消费者：&lt;/h5&gt;
+
+&lt;pre&gt;&lt;code&gt;var done = make(chan bool)
+var msgs = make(chan int)
+func produce() {
+    for i := 0; i &amp;lt; 10; i++ {
+        msgs &amp;lt;- i
+    }
+    fmt.Println(&amp;quot;Before closing channel&amp;quot;)
+    close(msgs)
+    fmt.Println(&amp;quot;Before passing true to done&amp;quot;)
+    done &amp;lt;- true
+    }
+func consume() {
+    for {
+        msg := &amp;lt;-msgs
+        time.Sleep(100 * time.Millisecond)
+        fmt.Println(&amp;quot;Consumer: &amp;quot;, msg)
+      }
+    }
+func main() {
+    go produce()
+    go consume()
+    &amp;lt;-done
+    fmt.Println(&amp;quot;After calling DONE&amp;quot;)
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;结果：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;Consumer:  0
+Consumer:  1
+Consumer:  2
+Consumer:  3
+Consumer:  4
+Consumer:  5
+Consumer:  6
+Consumer:  7
+Consumer:  8
+Before closing channel
+Before passing true to done
+After calling DONE  sending
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;这里由于是无缓存channel，前一个没有读取的时候，再发送会阻塞，类似fifo。同样接收也会卡住，为了验证，增加输出，变成如下代码：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;func produce() {
+    for i := 0; i &amp;lt; 4; i++ {
+        fmt.Println(&amp;quot;sending&amp;quot;)
+        msgs &amp;lt;- i
+        fmt.Println(&amp;quot;sent&amp;quot;)
+    }
+    fmt.Println(&amp;quot;Before closing channel&amp;quot;)
+    close(msgs)
+    fmt.Println(&amp;quot;Before passing true to done&amp;quot;)
+    done &amp;lt;- true
+}
+func consume() {
+    for msg := range msgs {
+        fmt.Println(&amp;quot;Consumer: &amp;quot;, msg)
+        time.Sleep(100 * time.Millisecond)
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;结果&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;Consumer:  0
+sent
+sending
+Consumer:  1
+sent
+sending
+Consumer:  2
+sent
+sending
+Consumer:  3
+sent
+Before closing channel
+Before passing true to done
+After calling DONE
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;用close做完成通知,执行结果无返回
+    package main&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;import (
+        &amp;quot;fmt&amp;quot;
+        &amp;quot;time&amp;quot;
+)
+
+var done = make(chan bool)
+var msgs = make(chan int)
+
+func produce(num int) {
+        for i := 0; i &amp;lt; num; i++ {
+                msgs &amp;lt;- i
+                time.Sleep(2 * time.Second)
+        }
+        done &amp;lt;- true
+}
+
+func consume() {
+        for {
+                select {
+                case msg, status := &amp;lt;-msgs:
+                        if status {
+                                fmt.Println(&amp;quot;Consumer: &amp;quot;, msg)
+                        } else {
+                                fmt.Println(&amp;quot;all worker is done&amp;quot;)
+                                return
+                        }
+                case &amp;lt;-time.After(1 * time.Second):
+                        fmt.Println(&amp;quot;1s&amp;quot;)
+                case &amp;lt;-done:
+                        fmt.Println(&amp;quot;all reveived is done&amp;quot;)
+                }
+        }
+}
+
+func main() {
+        num := 5
+        go produce(num)
+        go consume()
+        time.Sleep(time.Duration(num) * 3 * time.Second)
+        close(msgs)
+        fmt.Println(&amp;quot;quit....&amp;quot;)
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;【常用】执行结果用channel通知执行结果
+    package main&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;import (
+        &amp;quot;fmt&amp;quot;
+        &amp;quot;time&amp;quot;
+)
+
+type Result struct {
+        Success bool
+        Msg     string
+}
+
+var WorkResult = make(chan Result)
+var msgs = make(chan int)
+
+func produce(num int) {
+        for i := 0; i &amp;lt; num; i++ {
+                msgs &amp;lt;- i
+                time.Sleep(2 * time.Second)
+        }
+}
+
+func consume() {
+        for {
+                select {
+                case msg, status := &amp;lt;-msgs:
+                        if status {
+                                fmt.Println(&amp;quot;Consumer: &amp;quot;, msg)
+                                WorkResult &amp;lt;- Result{Msg: &amp;quot;work is done&amp;quot;, Success: true}
+                        } else {
+                                fmt.Println(&amp;quot;work channel is close&amp;quot;)
+                                return
+                        }
+                case &amp;lt;-time.After(1 * time.Second):
+                        fmt.Println(&amp;quot;1s have no work to reseive&amp;quot;)
+                }
+        }
+}
+
+func main() {
+        num := 5
+        go produce(num)
+        go consume()
+        for resultCnt := 0; resultCnt &amp;lt; num; resultCnt++ {
+                workResult := &amp;lt;-WorkResult
+                if workResult.Success {
+                        fmt.Println(&amp;quot;work success:&amp;quot;, workResult.Msg)
+                } else {
+                        fmt.Println(&amp;quot;work fail:&amp;quot;, workResult.Msg)
+                }
+                fmt.Printf(&amp;quot;reseive %d result, all is%d\n&amp;quot;, resultCnt+1, num)
+        }
+        //time.Sleep(time.Duration(num) * 4 * time.Second)
+        fmt.Println(&amp;quot;all work return, reseive is done&amp;quot;)
+        close(msgs)
+        fmt.Println(&amp;quot;quit....&amp;quot;)
+}
+&lt;/code&gt;&lt;/pre&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>新博客，新征程</title>
+      <link>http://106.186.127.250:1313/%E7%94%9F%E6%B4%BB/%E6%96%B0%E5%8D%9A%E5%AE%A2/</link>
+      <pubDate>Tue, 20 Oct 2015 16:30:09 +0800</pubDate>
+      
+      <guid>http://106.186.127.250:1313/%E7%94%9F%E6%B4%BB/%E6%96%B0%E5%8D%9A%E5%AE%A2/</guid>
       <description></description>
     </item>
     
