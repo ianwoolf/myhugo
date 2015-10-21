@@ -1,3 +1,4 @@
 cmd.log
 myhugo/public/*
 myhugo/themes/*
+myhugo/content/*
