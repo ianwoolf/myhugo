@@ -2,19 +2,273 @@
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>起风了</title>
-    <link>http://106.186.127.250:1313/</link>
+    <link>http://106.186.127.250:1313/blog/</link>
     <description>Recent content on 起风了</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
-    <lastBuildDate>Tue, 20 Oct 2015 16:31:14 +0800</lastBuildDate>
-    <atom:link href="http://106.186.127.250:1313/index.xml" rel="self" type="application/rss+xml" />
+    <lastBuildDate>Sun, 20 Oct 2115 16:30:09 +0800</lastBuildDate>
+    <atom:link href="http://106.186.127.250:1313/blog/index.xml" rel="self" type="application/rss+xml" />
+    
+    <item>
+      <title>新博客，新征程</title>
+      <link>http://106.186.127.250:1313/blog/%E7%94%9F%E6%B4%BB/%E6%96%B0%E5%8D%9A%E5%AE%A2/</link>
+      <pubDate>Sun, 20 Oct 2115 16:30:09 +0800</pubDate>
+      
+      <guid>http://106.186.127.250:1313/blog/%E7%94%9F%E6%B4%BB/%E6%96%B0%E5%8D%9A%E5%AE%A2/</guid>
+      <description>&lt;p&gt;本博客用hugo搭建，用supervisord启动。
+博文在&lt;a href=&#34;https://github.com/ianwoolf/myPages&#34;&gt;github&lt;/a&gt;上，技术的东西欢迎讨论，如果有错误和补充，欢迎大家提issure或者pr。&lt;/p&gt;
+
+&lt;p&gt;博客主要用来记录自己的一些东西，之前旧博客(无闻的那个)里东西没有完全入git，还没怎么整理、入新博客。最近没太多时间整理，有时间吧。&lt;/p&gt;
+
+&lt;p&gt;个人github上没太多东西，个人一些东西后来都做到了公司的git里。有时间拆一拆，把个人的，无关公司的东西，整理一下。&lt;/p&gt;
+
+&lt;p&gt;博主是北漂devops一名，现在主要写go语言，做集中化运维 及 各种拓展的平台、工具。&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>golang的锁</title>
+      <link>http://106.186.127.250:1313/blog/golang/golang%E7%9A%84%E9%94%81/</link>
+      <pubDate>Wed, 04 Nov 2015 16:30:09 +0800</pubDate>
+      
+      <guid>http://106.186.127.250:1313/blog/golang/golang%E7%9A%84%E9%94%81/</guid>
+      <description>
+
+&lt;p&gt;golang的锁分互斥锁和读写锁&lt;/p&gt;
+
+&lt;h3 id=&#34;互斥锁:d68f9ca30f841459dc70d42042f9e0d7&#34;&gt;互斥锁&lt;/h3&gt;
+
+&lt;p&gt;比较简单,这里先略过,以后有时间补上.&lt;/p&gt;
+
+&lt;h3 id=&#34;读写锁:d68f9ca30f841459dc70d42042f9e0d7&#34;&gt;读写锁&lt;/h3&gt;
+
+&lt;p&gt;读写锁是通过对unit32加减以及阻塞来完成对读锁和写锁的操作。&lt;/p&gt;
+
+&lt;p&gt;需要注意的一点是 加/放开 写锁会 =&amp;gt; 锁住/解锁读写锁；
+而读锁无限制，只是注意不要unlock超过lock的数量。&lt;/p&gt;
+
+&lt;p&gt;这两个函数会阻塞&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;func runtime_Semacquire(s *uint32)&lt;/code&gt; =&amp;gt; 用来等待解锁，解锁后加锁;&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;func runtime_Semrelease(s *uint32)&lt;/code&gt; =&amp;gt; 用来解锁，解锁后出发处于block的加锁动作&lt;/p&gt;
+
+&lt;p&gt;读写锁的部分源码,以后有时间补全注释&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;type RWMutex struct {
+    w           Mutex  // held if there are pending writers
+// 计数,同时用来控制wait =&amp;gt; 加减锁
+    writerSem   uint32 // semaphore for writers to wait for completing readers
+    readerSem   uint32 // semaphore for readers to wait for completing writers
+    readerCount int32  // number of pending readers
+    readerWait  int32  // number of departing readers
+}
+
+const rwmutexMaxReaders = 1 &amp;lt;&amp;lt; 30
+
+// RLock locks rw for reading.
+func (rw *RWMutex) RLock() {
+    if raceenabled {
+            _ = rw.w.state
+            raceDisable()
+    }
+// 原子操作
+    if atomic.AddInt32(&amp;amp;rw.readerCount, 1) &amp;lt; 0 {
+// 这个地方用计数来控制wait
+            runtime_Semacquire(&amp;amp;rw.readerSem)
+    }
+    if raceenabled {
+            raceEnable()
+            raceAcquire(unsafe.Pointer(&amp;amp;rw.readerSem))
+    }
+}
+//  解锁类似
+
+// 写锁的加锁
+func (rw *RWMutex) Lock() {
+    if raceenabled {
+            _ = rw.w.state
+            raceDisable()
+    }
+    rw.w.Lock()
+//原子操作，线程安全
+    r := atomic.AddInt32(&amp;amp;rw.readerCount, -rwmutexMaxReaders) + rwmutexMaxReaders  
+    if r != 0 &amp;amp;&amp;amp; atomic.AddInt32(&amp;amp;rw.readerWait, r) != 0 {
+// 可能会阻塞
+            runtime_Semacquire(&amp;amp;rw.writerSem)  
+    }
+    if raceenabled {
+            raceEnable()
+// 读锁  写锁  都被锁住
+            raceAcquire(unsafe.Pointer(&amp;amp;rw.readerSem)) // unsafe包获得指针
+            raceAcquire(unsafe.Pointer(&amp;amp;rw.writerSem))
+    }
+}
+// 解锁类似
+&lt;/code&gt;&lt;/pre&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>【转】辞退你与能力无关</title>
+      <link>http://106.186.127.250:1313/blog/%E7%94%9F%E6%B4%BB/%E8%BE%9E%E9%80%80%E4%BD%A0%E4%B8%8E%E8%83%BD%E5%8A%9B%E6%97%A0%E5%85%B3/</link>
+      <pubDate>Wed, 21 Oct 2015 21:30:09 +0800</pubDate>
+      
+      <guid>http://106.186.127.250:1313/blog/%E7%94%9F%E6%B4%BB/%E8%BE%9E%E9%80%80%E4%BD%A0%E4%B8%8E%E8%83%BD%E5%8A%9B%E6%97%A0%E5%85%B3/</guid>
+      <description>
+
+&lt;p&gt;有云的地方，就是天下。有人的地方，就是江湖。在职场的江湖上，有能力的你是桀骜不驯还是顺应潮流，取决于你对规则的理解和敬意。&lt;/p&gt;
+
+&lt;p&gt;情景再现&lt;/p&gt;
+
+&lt;p&gt;从销售主管到总经理我一路走来，被人管也管过人，也辞退过员工。这多数是因为员工的能力无法胜任工作，但这次被辞退的员工并非没有能力。刚开始我是欣赏他的，甚至准备予以重用。但一次制度的调整，让我对他的态度急转直下。&lt;/p&gt;
+
+&lt;p&gt;为了加强考核，我对相关制度做了调整，谁知在宣布时该员工当场反对，会议还没有结束就擅自离去。更严重的是，他竟然挑拨其他人不工作来对抗。&lt;/p&gt;
+
+&lt;p&gt;第一天，我观察了他和这些员工的表现，第二天他们依然无动于衷。无奈中，我先找了被他挑动的员工谈话，他们表示考核的调整的确给他们带来压力，但将会积极开展工作。最后我和他谈话也希望这是良性的沟通，但他依然态度强硬并且发出挑衅，如果我不调整制度，他就要和所挑动的员工一起离开。&lt;/p&gt;
+
+&lt;p&gt;最终，我作出了辞退他的决定，曾被他挑拨的员工也情绪稳定的开展了工作。在职场的江湖上，有能力的你是桀骜不驯还是顺应潮流，这取决于你对规则的理解和敬意。&lt;/p&gt;
+
+&lt;h2 id=&#34;规则1-学会尊敬和服从上级:774be0051f1b4f02143bd69cbb43e499&#34;&gt;规则1：学会尊敬和服从上级&lt;/h2&gt;
+
+&lt;p&gt;职场之所以会有上下级，是为了保证团队工作的开展。上级掌握了一定的资源和权力，考虑问题是从团队角度考虑而难以兼顾到个体。尊敬和服从上级是确保团队完成目标的重要条件。员工不站在团队的高度来思考问题，只站在自己的角度去找上级的麻烦甚至恃才傲物，这样的员工很难生存更谈不上走得好远。&lt;/p&gt;
+
+&lt;h2 id=&#34;规则2-如果你的工作不能达到上级的要求-一定要及时和上级沟通:774be0051f1b4f02143bd69cbb43e499&#34;&gt;规则2：如果你的工作不能达到上级的要求，一定要及时和上级沟通&lt;/h2&gt;
+
+&lt;p&gt;在实际工作中，有的工作需要一定的时间来保证。可能在一定时期内你的工作还没有让别人看到显着成绩，这时不要和你的上级距离太远，要创造条件去和他沟通，要让他知道你的进度和计划和要取得的成绩。你这样做了上级不会责备你，他还会利用所掌握的资源给你帮助，让你提前取得业绩。&lt;/p&gt;
+
+&lt;p&gt;然而，有的职场新手甚至老手容易犯的错误却是，越是没有成绩越是不愿去找上级沟通，认为自己没有面子，对上级采取敬而远之的态度。这样的风险很大，因为你业绩低迷上级本身就不会满意，会对你的工作能力产生怀疑；如果再不了解工作状况和进度，还会认为你没有努力工作。时间一长，你就可能进入要被淘汰的黑名单了。&lt;/p&gt;
+
+&lt;p&gt;其实在每次的淘汰名单中，并不全是业绩最差的人，但不会主动找上级沟通的人却会占很大比例。&lt;/p&gt;
+
+&lt;p&gt;那位被辞退的员工还有一个重要原因，就在于他近期工作业绩并不明显，我得到的反馈只是正在进行中。至于是如何进行的、进行的情况如何，一直得不到明确答复。“用人不疑”是一条原则，但这是需要有不被怀疑的行动的。&lt;/p&gt;
+
+&lt;h2 id=&#34;规则3-对于认为不合理的事情要通过正常的途径与方式去反馈:774be0051f1b4f02143bd69cbb43e499&#34;&gt;规则3：对于认为不合理的事情要通过正常的途径与方式去反馈&lt;/h2&gt;
+
+&lt;p&gt;一个团队的决定有可能是对的，也有可能不太合理。但决定具备一定的权威性和强制力，也是保障一个团队正常运转的必要条件，是从大局和整体的角度出发的。员工先换位思考，如果对团队的利益有保障就要服从。如果有不尽完善的地方，要选择正常的程序和方式提出建议等待回复，只要决定没有触犯法规，员工应该无条件服从。&lt;/p&gt;
+
+&lt;p&gt;如果采取消极方式对团队的决定进行对抗，受伤害的只会是员工自己。&lt;/p&gt;
+
+&lt;h2 id=&#34;规则4-切忌煽动同事与团队对抗:774be0051f1b4f02143bd69cbb43e499&#34;&gt;规则4：切忌煽动同事与团队对抗&lt;/h2&gt;
+
+&lt;p&gt;职场中受委屈甚至不公平的事情都是正常的，员工可以选择合适的方式提出，也可以选择到执法部门寻求帮助。但是采取煽动闹事的方式解决问题，往往把自己推到一个更加不利的境地，因为这种方式是团队是绝对不能容忍的。结果问题没有解决，自己还被辞退。&lt;/p&gt;
+
+&lt;h2 id=&#34;规则5-如果你不能为一个团队创造一定的价值-起码不要成为制造码放的因素:774be0051f1b4f02143bd69cbb43e499&#34;&gt;规则5：如果你不能为一个团队创造一定的价值，起码不要成为制造码放的因素&lt;/h2&gt;
+
+&lt;p&gt;团队里成员形形色色个性各异，有的员工喜欢用小手腕制造麻烦、造谣惑众来达到一些目的。一个人的为人和能力在团队成员的长期合作中，大家都会有判断。&lt;/p&gt;
+
+&lt;p&gt;小手腕能让一个人得到短期利益，一旦其他成员了解了他以后，他便很难立足。要组织里长期生存下去，大聪明是必要的。&lt;/p&gt;
+
+&lt;h2 id=&#34;规则6-对于上级安排的临时性工作-一定要及时反馈:774be0051f1b4f02143bd69cbb43e499&#34;&gt;规则6：对于上级安排的临时性工作，一定要及时反馈&lt;/h2&gt;
+
+&lt;p&gt;有时上级会安排临时性的工作给你，这些工作可能非常紧急，上级会要求随时反馈完成期限，这也是让上级增进对你信任度的机会。&lt;/p&gt;
+
+&lt;p&gt;我遭遇过这样的员工。公司送货发生了车祸，导致货物大量破损，经销商拒绝接货。为避免更多的损失，我告诉负责该市场的业务代表，让他亲自参与这次事件的处理，并随时跟我保持联系。但我等到夜里十点也没有消息，打电话居然关机了。最后送货司机只得把产品又拉回了工厂，公司多付出了上万元的损失。第二天联系上他时，他居然说和朋友去喝酒给忘了。从此，我对他的工作能力与态度充满了质疑。&lt;/p&gt;
+
+&lt;h2 id=&#34;规则7-成就上级从而成就自己:774be0051f1b4f02143bd69cbb43e499&#34;&gt;规则7：成就上级从而成就自己&lt;/h2&gt;
+
+&lt;p&gt;工作使大家走到了一起，同事首先就是一种合作关系。上级所掌握的资源和影响力，对人在职场中的发展起到决定性作用。&lt;/p&gt;
+
+&lt;p&gt;职场上快速发展的人无疑都是善于和上级合作的，他们在做好份内事的同时，会积极帮助上级分担工作排忧解难。上级也会把更多的锻炼机会提供给他们，把自己的真经传授给他们。他们会逐步熟悉上级的工作内容和技巧，而这些都是一个人得到快速发展的重要条件。当上级进一步提升时，他首先会把升迁的机会推荐给他们。&lt;/p&gt;
+
+&lt;p&gt;在团队中这些人威信都比较高，工作起来阻力就会小，也更容易得到同事们和更高上级的肯定和重视。&lt;/p&gt;
+
+&lt;p&gt;成就上级从而成就自己绝对是一条重要的原则。当你在为上级偏心而抱怨时，是否该认真反思一下自己遵循了这个原则。机会真的不会从天而降的，更多时候要靠自己去争取。&lt;/p&gt;
+
+&lt;h2 id=&#34;规则8-不要抱怨-不要背后讨论:774be0051f1b4f02143bd69cbb43e499&#34;&gt;规则8：不要抱怨，不要背后讨论&lt;/h2&gt;
+
+&lt;p&gt;同事之间既有合作也有竞争，当你有牢骚要发或想讲上级坏话时，千万不要当着你的同事的面，即便这是你的“铁哥们”.也许在你逞口舌之快时，你的坏话已传到上级耳朵里，甚至已被加工渲染，这会让你非常被动。&lt;/p&gt;
+
+&lt;p&gt;当我做被管理者时，也曾因为当着同事的面发牢骚而深受其害。而在做管理者时，也经常接到不少的小报告。当你有牢骚或想说坏话时，最好找个没人的地方去自言自语吧。&lt;/p&gt;
+
+&lt;h2 id=&#34;规则9-把事情做好的同时-把人做好:774be0051f1b4f02143bd69cbb43e499&#34;&gt;规则9：把事情做好的同时，把人做好&lt;/h2&gt;
+
+&lt;p&gt;从进入职场开始，就要把塑造自己的品牌作为一项重要的事来做。而把事做好是基本的，同时也要把人做好。把人做好更是一个人品牌塑造的重要条件，你在职场上的声誉会决定职场的长度和宽度。&lt;/p&gt;
+
+&lt;p&gt;在现代的中国，人品依然是企业用人的重要标准。你的人品是需要大家通过与你共事看出来的，也是一个长期积累的过程。不仅要在单位内还要在行业内、在业界树立你良好形象。当然好人不是指长袖善舞、八面玲珑，而是人一定要学会承担责任，不去做有害他人和组织的事情。&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>【原创】golang 的io(二)</title>
+      <link>http://106.186.127.250:1313/blog/golang/io2/</link>
+      <pubDate>Tue, 20 Oct 2015 23:05:09 +0800</pubDate>
+      
+      <guid>http://106.186.127.250:1313/blog/golang/io2/</guid>
+      <description>&lt;p&gt;合理利用io包，可以优雅代码，
+比如直接写beego里controller的context，可以更直观、将生产结果更好的嵌入自己的逻辑里&lt;/p&gt;
+
+&lt;p&gt;用法很多很多，个人日常用了集中，不断总结中，也欢迎大家给我发&lt;a href=&#34;https://github.com/ianwoolf/myPages&#34;&gt;pr&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;1.直接写&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;func GenJsonRes(w http.ResponseWriter, status int, msg string, data interface{}) {
+    w.Header().Set(&amp;quot;Content-Type&amp;quot;, &amp;quot;application/json; charset=utf-8&amp;quot;)
+    w.WriteHeader(status)
+    content, err := json.Marshal(Response{Status_code: status, Msg: msg, Data: data})
+    if err != nil {
+        http.Error(w, err.Error(), 500)
+        return
+    }
+    fmt.Fprintf(w, &amp;quot;%s&amp;quot;, string(content))
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;2.把生成结果的的过程嵌入到自己的业务逻辑里&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;type Response struct {
+    Success bool          `json:&amp;quot;success&amp;quot;`
+    Msg     string        `json:&amp;quot;msg&amp;quot;`
+    Data    []interface{} `json:&amp;quot;data&amp;quot;`
+}
+
+func (r *Response) GenResponse(w http.ResponseWriter, status int) error {
+    w.Header().Set(&amp;quot;Content-Type&amp;quot;, &amp;quot;application/json; charset=utf-8&amp;quot;)
+    w.WriteHeader(status)
+    if content, err := json.Marshal(r); err != nil {
+        return err
+    } else {
+        fmt.Fprintf(w, &amp;quot;%s&amp;quot;, string(content))
+    }
+    return nil
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;3.官网例子，输出到标准输出&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;func main() {
+// A Buffer can turn a string or a []byte into an io.Reader.
+    buf := bytes.NewBufferString(&amp;quot;R29waGVycyBydWxlIQ==&amp;quot;)
+    dec := base64.NewDecoder(base64.StdEncoding, buf)
+    io.Copy(os.Stdout, dec)
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;4.复制文件时，直接用file写入file&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;func CopyFile(srcName, dstName string) (written int64, err error) {
+    src, err := os.Open(srcName)
+    defer src.Close()
+    if err != nil {
+        return
+    }
+    dst, err := os.OpenFile(dstName, os.O_WRONLY|os.O_CREATE, 0644)
+    defer dst.Close()
+    if err != nil {
+        return
+    }
+    return io.Copy(dst, src)
+}
+&lt;/code&gt;&lt;/pre&gt;
+</description>
+    </item>
     
     <item>
       <title>用docker起golang的gin服务</title>
-      <link>http://106.186.127.250:1313/docker/%E7%94%A8docker%E8%B5%B7gin%E6%9C%8D%E5%8A%A1/</link>
+      <link>http://106.186.127.250:1313/blog/docker/%E7%94%A8docker%E8%B5%B7gin%E6%9C%8D%E5%8A%A1/</link>
       <pubDate>Tue, 20 Oct 2015 16:31:14 +0800</pubDate>
       
-      <guid>http://106.186.127.250:1313/docker/%E7%94%A8docker%E8%B5%B7gin%E6%9C%8D%E5%8A%A1/</guid>
+      <guid>http://106.186.127.250:1313/blog/docker/%E7%94%A8docker%E8%B5%B7gin%E6%9C%8D%E5%8A%A1/</guid>
       <description>
 
 &lt;h3 id=&#34;首先启动docker:b6ce1d1065d693b2dafcce54d8ea230a&#34;&gt;首先启动docker&lt;/h3&gt;
@@ -53,11 +307,1033 @@ docker save -o go-1.4.img golang:1.4.2   导出镜像
     </item>
     
     <item>
-      <title>一个函数解决http发送</title>
-      <link>http://106.186.127.250:1313/golang/%E4%B8%80%E8%A1%8C%E5%87%BD%E6%95%B0%E8%A7%A3%E5%86%B3http%E5%8F%91%E9%80%81/</link>
+      <title>golang 写文件的4中方式</title>
+      <link>http://106.186.127.250:1313/blog/golang/golang%E5%86%99%E6%96%87%E4%BB%B6%E7%9A%844%E4%B8%AD%E6%96%B9%E5%BC%8F/</link>
       <pubDate>Tue, 20 Oct 2015 16:30:09 +0800</pubDate>
       
-      <guid>http://106.186.127.250:1313/golang/%E4%B8%80%E8%A1%8C%E5%87%BD%E6%95%B0%E8%A7%A3%E5%86%B3http%E5%8F%91%E9%80%81/</guid>
+      <guid>http://106.186.127.250:1313/blog/golang/golang%E5%86%99%E6%96%87%E4%BB%B6%E7%9A%844%E4%B8%AD%E6%96%B9%E5%BC%8F/</guid>
+      <description>&lt;p&gt;package main&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;import (
+    &amp;quot;bufio&amp;quot;  //缓存IO
+    &amp;quot;fmt&amp;quot;
+    &amp;quot;io/ioutil&amp;quot; //io 工具包
+    &amp;quot;io&amp;quot;
+    &amp;quot;os&amp;quot;
+)
+
+func check(e error) {
+    if e != nil {
+    panic(e)
+    }
+}
+
+func checkFileIsExist(filename string) (bool) {
+    var exist = true;
+    if _, err := os.Stat(filename); os.IsNotExist(err) {
+        exist = false;
+    }
+    return exist;
+}
+
+func main() {
+    var wireteString = &amp;quot;测试n&amp;quot;
+    var filename = &amp;quot;./output1.txt&amp;quot;;
+    var f    *os.File
+    var err1   error;
+
+// 第一种方式: 使用 io.WriteString 写入文件 
+    if checkFileIsExist(filename) {  //如果文件存在
+        f, err1 = os.OpenFile(filename, os.O_APPEND, 0666)  //打开文件
+        fmt.Println(&amp;quot;文件存在&amp;quot;);
+    }else {
+        f, err1 = os.Create(filename)  //创建文件
+        fmt.Println(&amp;quot;文件不存在&amp;quot;);
+    }
+    check(err1)
+    n, err1 := io.WriteString(f, wireteString) //写入文件(字符串)
+    check(err1)
+    fmt.Printf(&amp;quot;写入 %d 个字节n&amp;quot;, n);
+
+//  第二种方式: 使用 ioutil.WriteFile 写入文件 
+    var d1 = []byte(wireteString);
+    err2 := ioutil.WriteFile(&amp;quot;./output2.txt&amp;quot;, d1, 0666)  //写入文件(字节数组)
+    check(err2)
+
+//  第三种方式:  使用 File(Write,WriteString) 写入文件  
+    f, err3 := os.Create(&amp;quot;./output3.txt&amp;quot;)  //创建文件
+    check(err3)
+    defer f.Close()
+    n2, err3 := f.Write(d1)  //写入文件(字节数组)
+    check(err3)
+    fmt.Printf(&amp;quot;写入 %d 个字节n&amp;quot;, n2)
+    n3, err3 := f.WriteString(&amp;quot;writesn&amp;quot;) //写入文件(字节数组)
+    fmt.Printf(&amp;quot;写入 %d 个字节n&amp;quot;, n3)
+    f.Sync()
+
+// 第四种方式:  使用 bufio.NewWriter 写入文件 
+    w := bufio.NewWriter(f)  //创建新的 Writer 对象
+    n4, err3 := w.WriteString(&amp;quot;bufferedn&amp;quot;)
+    fmt.Printf(&amp;quot;写入 %d 个字节n&amp;quot;, n4)
+    w.Flush()
+    f.Close()
+}
+&lt;/code&gt;&lt;/pre&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>【转】golang 的io(一)</title>
+      <link>http://106.186.127.250:1313/blog/golang/io/</link>
+      <pubDate>Tue, 20 Oct 2015 16:30:09 +0800</pubDate>
+      
+      <guid>http://106.186.127.250:1313/blog/golang/io/</guid>
+      <description>
+
+&lt;h3 id=&#34;io-包为i-o原语提供了基本的接口-它主要包装了这些原语的已有实现:1f9b02d070b8cc71a61fea0c5ae37919&#34;&gt;io 包为I/O原语提供了基本的接口。它主要包装了这些原语的已有实现。&lt;/h3&gt;
+
+&lt;p&gt;由于这些接口和原语以不同的实现包装了低级操作，因此除非另行通知，否则客户端不应假定它们对于并行执行是安全的。&lt;/p&gt;
+
+&lt;p&gt;在io包中最重要的是两个接口：Reader和Writer接口。本章所提到的各种IO包，都跟这两个接口有关，也就是说，只要实现了这两个接口，它就有了IO的功能。&lt;/p&gt;
+
+&lt;h5 id=&#34;reader接口:1f9b02d070b8cc71a61fea0c5ae37919&#34;&gt;Reader接口&lt;/h5&gt;
+
+&lt;p&gt;Reader接口的定义如下：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;type Reader interface {
+    Read(p []byte) (n int, err error)
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;官方文档中关于该接口方法的说明：&lt;/p&gt;
+
+&lt;blockquote&gt;
+&lt;p&gt;Read 将 len(p) 个字节读取到 p 中。它返回读取的字节数 n（0 &amp;lt;= n &amp;lt;= len(p)） 以及任何遇到的错误。即使 Read 返回的 n &amp;lt; len(p)，它也会在调用过程中使用 p 的全部作为暂存空间。若一些数据可用但不到 len(p) 个字节，Read 会照例返回可用的数据，而不是等待更多数据。
+当 Read 在成功读取 n &amp;gt; 0 个字节后遇到一个错误或EOF（end-of-file），它就会返回读取的字节数。它会从相同的调用中返回（非nil的）错误或从随后的调用中返回错误（同时 n == 0）。 一般情况的一个例子就是 Reader 在输入流结束时会返回一个非零的字节数，同时返回的err不是EOF就是nil。无论如何，下一个 Read 都应当返回 0, EOF。
+调用者应当总在考虑到错误 err 前处理 n &amp;gt; 0 的字节。这样做可以在读取一些字节，以及允许的 EOF 行为后正确地处理I/O错误。&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;也就是说，当Read方法返回错误时，不代表没有读取到任何数据。调用者应该处理返回的任何数据，之后才处理可能的错误。&lt;/p&gt;
+
+&lt;p&gt;根据Go语言中关于接口和实现了接口的类型的定义，我们知道Reader接口的方法集只包含一个Read方法，因此，所有实现了Read方法的类型都实现 了io.Reader接口，也就是说，在所有需要io.Reader的地方，可以传递实现了Read()方法的类型的实例。&lt;/p&gt;
+
+&lt;p&gt;下面，我们通过具体例子来谈谈该接口的用法。&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;func ReadFrom(reader io.Reader, num int) ([]byte, error) {
+    p := make([]byte, num)
+    n, err := reader.Read(p)
+    if n &amp;gt; 0 {
+        return p[:n], nil
+    }
+    return p, err
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;ReadFrom函数将io.Reader作为参数，也就是说，ReadFrom可以从任意的地方读取数据，只要来源实现了io.Reader接口。比如，我们可以从标准输入、文件、字符串等读取数据，示例代码如下：
+- 从标准输入读取&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;`data, err = ReadFrom(os.Stdin, 11)`
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;p&gt;从普通文件读取，其中file是os.File的实例&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;data, err = ReadFrom(file, 9)&lt;/code&gt;&lt;/p&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;从字符串读取&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;data, err = ReadFrom(strings.NewReader(&amp;quot;from string&amp;quot;), 12)&lt;/code&gt;&lt;/p&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;strong&gt;小贴士&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;io.EOF 变量的定义：&lt;code&gt;var EOF = errors.New(&amp;quot;EOF&amp;quot;)&lt;/code&gt;，是error类型。根据reader接口的说明，在 n &amp;gt; 0 且数据被读完了的情况下，返回的error有可能是EOF也有可能是nil。&lt;/p&gt;
+
+&lt;h5 id=&#34;writer接口:1f9b02d070b8cc71a61fea0c5ae37919&#34;&gt;Writer接口&lt;/h5&gt;
+
+&lt;p&gt;Writer接口的定义如下：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;type Writer interface {
+    Write(p []byte) (n int, err error)
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;官方文档中关于该接口方法的说明：&lt;/p&gt;
+
+&lt;blockquote&gt;
+&lt;p&gt;Write 将 len(p) 个字节从 p 中写入到基本数据流中。它返回从 p 中被写入的字节数 n（0 &amp;lt;= n &amp;lt;= len(p)）以及任何遇到的引起写入提前停止的错误。若 Write 返回的 n &amp;lt; len(p)，它就必须返回一个非nil的错误。&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;同样的，所有实现了Write方法的类型都实现了io.Writer接口。&lt;/p&gt;
+
+&lt;p&gt;在上个例子中，我们是自己实现一个函数接收一个io.Reader类型的参数。这里，我们通过标准库的例子来学习。&lt;/p&gt;
+
+&lt;p&gt;在fmt标准库中，有一组函数：Fprint/Fprintf/Fprintln，它们接收一个io.Wrtier类型参数（第一个参数），也就是说它们将数据格式化输出到io.Writer中。那么，调用这组函数时，该如何传递这个参数呢？&lt;/p&gt;
+
+&lt;p&gt;我们以fmt.Fprintln为例，同时看一下fmt.Println函数的源码。&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;func Println(a ...interface{}) (n int, err error) {
+  return Fprintln(os.Stdout, a...)
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;实现了io.Reader接口或io.Writer接口的类型&lt;/p&gt;
+
+&lt;p&gt;初学者看到函数参数是一个接口类型，很多时候有些束手无策，不知道该怎么传递参数。还有人问：标准库中有哪些类型实现了io.Reader或io.Writer接口？&lt;/p&gt;
+
+&lt;p&gt;通过本节上面的例子，我们可以知道，os.File同时实现了这两个接口。我们还看到 os.Stdin/Stdout这样的代码，它们似乎分别实现了 io.Reader/io.Writer接口。没错，实际上在os包中有这样的代码：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;var (
+Stdin  = NewFile(uintptr(syscall.Stdin), &amp;quot;/dev/stdin&amp;quot;)
+Stdout = NewFile(uintptr(syscall.Stdout), &amp;quot;/dev/stdout&amp;quot;)
+Stderr = NewFile(uintptr(syscall.Stderr), &amp;quot;/dev/stderr&amp;quot;)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;)
+也就是说，Stdin/Stdout/Stderr 只是三个特殊的文件（即都是os.File的实例），自然也实现了io.Reader和io.Writer。&lt;/p&gt;
+
+&lt;p&gt;目前，Go文档中还没法直接列出实现了某个接口的所有类型。不过，我们可以通过查看标准库文档，列出实现了io.Reader或io.Writer接口的类型（导出的类型）：&lt;/p&gt;
+
+&lt;p&gt;os.File 同时实现了io.Reader和io.Writer&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;- strings.Reader 实现了io.Reader
+- bufio.Reader/Writer 分别实现了io.Reader和io.Writer
+- bytes.Buffer 同时实现了io.Reader和io.Writer
+- bytes.Reader 实现了io.Reader
+- compress/gzip.Reader/Writer 分别实现了io.Reader和io.Writer
+- crypto/cipher.StreamReader/StreamWriter 分别实现了io.Reader和io.Writer
+- crypto/tls.Conn 同时实现了io.Reader和io.Writer
+- encoding/csv.Reader/Writer 分别实现了io.Reader和io.Writer
+- mime/multipart.Part 实现了io.Reader
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;除此之外，io包本身也有这两个接口的实现类型。如：&lt;/p&gt;
+
+&lt;p&gt;实现了Reader的类型：LimitedReader、PipeReader、SectionReader
+实现了Writer的类型：PipeWriter&lt;/p&gt;
+
+&lt;p&gt;以上类型中，常用的类型有：os.File、strings.Reader、bufio.Reader/Writer、bytes.Buffer、bytes.Reader&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;小贴士&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;从接口名称很容易猜到，一般地，Go中接口的命名约定：接口名以er结尾。注意，这里并非强行要求，你完全可以不以 er 结尾。标准库中有些接口也不是以 er 结尾的。&lt;/p&gt;
+
+&lt;h5 id=&#34;readerat和writerat接口:1f9b02d070b8cc71a61fea0c5ae37919&#34;&gt;ReaderAt和WriterAt接口&lt;/h5&gt;
+
+&lt;p&gt;&lt;strong&gt;ReaderAt接口&lt;/strong&gt;的定义如下：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;type ReaderAt interface {
+ReadAt(p []byte, off int64) (n int, err error)
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;官方文档中关于该接口方法的说明：&lt;/p&gt;
+
+&lt;blockquote&gt;
+&lt;p&gt;ReadAt 从基本输入源的偏移量 off 处开始，将 len(p) 个字节读取到 p 中。它返回读取的字节数 n（0 &amp;lt;= n &amp;lt;= len(p)）以及任何遇到的错误。
+当 ReadAt 返回的 n &amp;lt; len(p) 时，它就会返回一个非nil的错误来解释 为什么没有返回更多的字节。在这一点上，ReadAt 比 Read 更严格。
+即使 ReadAt 返回的 n &amp;lt; len(p)，它也会在调用过程中使用 p 的全部作为暂存空间。若一些数据可用但不到 len(p) 字节，ReadAt 就会阻塞直到所有数据都可用或产生一个错误。 在这一点上 ReadAt 不同于 Read。
+若 n = len(p) 个字节在输入源的的结尾处由 ReadAt 返回，那么这时 err == EOF 或者 err == nil。
+若 ReadAt 按查找偏移量从输入源读取，ReadAt 应当既不影响基本查找偏移量也不被它所影响。
+ReadAt 的客户端可对相同的输入源并行执行 ReadAt 调用。&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;可见，ReaderAt接口使得可以从指定偏移量处开始读取数据。&lt;/p&gt;
+
+&lt;p&gt;简单示例代码如下：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;package main
+    import (
+    &amp;quot;fmt&amp;quot;
+    &amp;quot;strings&amp;quot;
+)
+func main() {
+    reader := strings.NewReader(&amp;quot;Go语言学习园地&amp;quot;)
+    p := make([]byte, 6)
+    n, err := reader.ReadAt(p, 2)
+    if err != nil {
+        panic(err)
+    }
+    fmt.Printf(&amp;quot;%s, %d\n&amp;quot;, p, n)
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;运行结果：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;语言, 6
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;strong&gt;WriterAt接口&lt;/strong&gt;的定义如下：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;type WriterAt interface {
+WriteAt(p []byte, off int64) (n int, err error)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;}
+官方文档中关于该接口方法的说明：&lt;/p&gt;
+
+&lt;blockquote&gt;
+&lt;p&gt;WriteAt 从 p 中将 len(p) 个字节写入到偏移量 off 处的基本数据流中。它返回从 p 中被写入的字节数 n（0 &amp;lt;= n &amp;lt;= len(p)）以及任何遇到的引起写入提前停止的错误。若 WriteAt 返回的 n &amp;lt; len(p)，它就必须返回一个非nil的错误。
+若 WriteAt 按查找偏移量写入到目标中，WriteAt 应当既不影响基本查找偏移量也不被它所影响。
+若区域没有重叠，WriteAt 的客户端可对相同的目标并行执行 WriteAt 调用。&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;我们可以通过该接口将数据写入数据流的特定偏移量之后。&lt;/p&gt;
+
+&lt;p&gt;通过简单示例来演示WriteAt方法的使用（os.File实现了WriterAt接口）：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;package main
+import (
+&amp;quot;fmt&amp;quot;
+&amp;quot;os&amp;quot;
+)
+func main() {
+file, err := os.Create(&amp;quot;writeAt.txt&amp;quot;)
+if err != nil {
+    panic(err)
+}
+defer file.Close()
+file.WriteString(&amp;quot;Golang中文社区——这里是多余的&amp;quot;)
+n, err := file.WriteAt([]byte(&amp;quot;Go语言学习园地&amp;quot;), 24)
+if err != nil {
+    panic(err)
+}
+fmt.Println(n)
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;打开文件WriteAt.txt，内容是：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;Golang中文社区——Go语言学习园地
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;分析：&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;file.WriteString(&amp;quot;Golang中文社区——这里是多余的&amp;quot;)&lt;/code&gt; 往文件中写入&lt;code&gt;Golang中文社区——这里是多余的&lt;/code&gt;，之后 &lt;code&gt;file.WriteAt([]byte(&amp;quot;Go语言学习园地&amp;quot;), 24)&lt;/code&gt; 在文件流的offset=24处写入&lt;code&gt;Go语言学习园地&lt;/code&gt;（会覆盖该位置的内容）。&lt;/p&gt;
+
+&lt;h5 id=&#34;readerfrom-和-writerto-接口:1f9b02d070b8cc71a61fea0c5ae37919&#34;&gt;ReaderFrom 和 WriterTo 接口&lt;/h5&gt;
+
+&lt;p&gt;&lt;strong&gt;ReaderFrom&lt;/strong&gt;的定义如下：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;type ReaderFrom interface {
+ReadFrom(r Reader) (n int64, err error)
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;官方文档中关于该接口方法的说明：&lt;/p&gt;
+
+&lt;blockquote&gt;
+&lt;p&gt;ReadFrom 从 r 中读取数据，直到 EOF 或发生错误。其返回值 n 为读取的字节数。除 io.EOF 之外，在读取过程中遇到的任何错误也将被返回。
+如果 ReaderFrom 可用，Copy 函数就会使用它。
+注意：ReadFrom方法不会返回err == EOF。&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;下面的例子简单的实现将文件中的数据全部读取（显示在标准输出）：
+    package main
+    import (
+        &amp;ldquo;bufio&amp;rdquo;
+        &amp;ldquo;os&amp;rdquo;
+    )
+    func main() {
+        file, err := os.Open(&amp;ldquo;writeAt.txt&amp;rdquo;)
+        if err != nil {
+            panic(err)
+        }
+        defer file.Close()
+        writer := bufio.NewWriter(os.Stdout)
+        writer.ReadFrom(file)
+        writer.Flush()
+    }&lt;/p&gt;
+
+&lt;p&gt;当然，我们可以通过ioutil包的ReadFile函数获取文件全部内容。其实，跟踪一下ioutil.ReadFile的源码，会发现其实也是通过ReadFrom方法实现（用的是bytes.Buffer，它实现了ReaderFrom接口）。&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;func readAll(r io.Reader, capacity int64) (b []byte, err error) {
+        buf := bytes.NewBuffer(make([]byte, 0, capacity))
+        // If the buffer overflows, we will get bytes.ErrTooLarge.
+        // Return that as an error. Any other panic remains.
+        defer func() {
+                e := recover()
+                if e == nil {
+                        return
+                }
+                if panicErr, ok := e.(error); ok &amp;amp;&amp;amp; panicErr == bytes.ErrTooLarge {
+                        err = panicErr
+                } else {
+                        panic(e)
+                }
+        }()
+        _, err = buf.ReadFrom(r)
+        return buf.Bytes(), err
+}
+func ReadFile(filename string) ([]byte, error) {
+        f, err := os.Open(filename)
+        if err != nil {
+                return nil, err
+        }
+        defer f.Close()
+        // It&#39;s a good but not certain bet that FileInfo will tell us exactly how much to
+        // read, so let&#39;s try it but be prepared for the answer to be wrong.
+        var n int64
+
+        if fi, err := f.Stat(); err == nil {
+                // Don&#39;t preallocate a huge buffer, just in case.
+                if size := fi.Size(); size &amp;lt; 1e9 {
+                        n = size
+                }
+        }
+        // As initial capacity for readAll, use n + a little extra in case Size is zero,
+        // and to avoid another allocation after Read has filled the buffer.  The readAll
+        // call will read into its allocated internal buffer cheaply.  If the size was
+        // wrong, we&#39;ll either waste some space off the end or reallocate as needed, but
+        // in the overwhelmingly common case we&#39;ll get it just right.
+        return readAll(f, n+bytes.MinRead)
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;如果不通过ReadFrom接口来做这件事，而是使用io.Reader接口，我们有两种思路：&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;先获取文件的大小（File的Stat方法），之后定义一个该大小的[]byte，通过Read一次性读取&lt;/li&gt;
+&lt;li&gt;定义一个小的[]byte，不断的调用Read方法直到遇到EOF，将所有读取到的[]byte连接到一起&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;代码实现如下：
+方法１：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;package main
+import (
+&amp;quot;fmt&amp;quot;
+&amp;quot;os&amp;quot;
+)
+func main() {
+    file, err := os.Open(&amp;quot;writeAt.txt&amp;quot;)
+if err != nil {
+    panic(err)
+}
+defer file.Close()
+stat, err := file.Stat()
+if err != nil {
+    fmt.Println(err)
+}
+size := stat.Size()
+    a := make([]byte, size)
+file.Read(a)
+fmt.Println(string(a))
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;方法２：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;package main
+import (
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;    &amp;rdquo;fmt&amp;rdquo;
+    &amp;rdquo;os&amp;rdquo;
+    )
+    func main() {
+        file, err := os.Open(&amp;ldquo;writeAt.txt&amp;rdquo;)
+    if err != nil {
+        panic(err)
+    }
+    defer file.Close()
+    a := make([]byte, 5)
+    var b []byte
+    for n, err := file.Read(a); err == nil; n, err = file.Read(a) {
+        b = append(b, a[:n]&amp;hellip;)
+    }
+    fmt.Println(string(b))
+    }&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;提示&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;通过查看 bufio.Writer或strings.Buffer 类型的ReadFrom方法实现，会发现，其实它们的实现和上面说的第2种思路类似。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;WriterTo&lt;/strong&gt;的定义如下：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;type WriterTo interface {
+WriteTo(w Writer) (n int64, err error)
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;官方文档中关于该接口方法的说明：&lt;/p&gt;
+
+&lt;blockquote&gt;
+&lt;p&gt;WriteTo 将数据写入 w 中，直到没有数据可写或发生错误。其返回值 n 为写入的字节数。 在写入过程中遇到的任何错误也将被返回。
+如果 WriterTo 可用，Copy 函数就会使用它。&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;读者是否发现，其实ReaderFrom和WriterTo接口的方法接收的参数是io.Reader和io.Writer类型。根据io.Reader和io.Writer接口的讲解，对该接口的使用应该可以很好的掌握。&lt;/p&gt;
+
+&lt;p&gt;这里只提供简单的一个示例代码：将一段文本输出到标准输出&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;reader := bytes.NewReader([]byte(&amp;quot;Go语言学习园地&amp;quot;))
+reader.WriteTo(os.Stdout)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;通过io.ReaderFrom和io.WriterTo的学习，我们知道，如果这样的需求，可以考虑使用这两个接口：“一次性从某个地方读或写到某个地方去。”&lt;/p&gt;
+
+&lt;h5 id=&#34;seeker接口:1f9b02d070b8cc71a61fea0c5ae37919&#34;&gt;Seeker接口&lt;/h5&gt;
+
+&lt;p&gt;接口定义如下：
+    type Seeker interface {
+    Seek(offset int64, whence int) (ret int64, err error)
+}&lt;/p&gt;
+
+&lt;p&gt;官方文档中关于该接口方法的说明：
+&amp;gt; Seek 设置下一次 Read 或 Write 的偏移量为 offset，它的解释取决于 whence： 0 表示相对于文件的起始处，1 表示相对于当前的偏移，而 2 表示相对于其结尾处。 Seek 返回新的偏移量和一个错误，如果有的话。&lt;/p&gt;
+
+&lt;p&gt;也就是说，Seek方法用于设置偏移量的，这样可以从某个特定位置开始操作数据流。听起来和ReaderAt/WriteAt接口有些类似，不过Seeker接口更灵活，可以更好的控制读写数据流的位置。&lt;/p&gt;
+
+&lt;p&gt;简单的示例代码：获取倒数第二个字符（需要考虑UTF-8编码，这里的代码只是一个示例）&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;package main
+import (
+&amp;quot;fmt&amp;quot;
+&amp;quot;strings&amp;quot;
+)
+func main() {
+reader := strings.NewReader(&amp;quot;Go语言学习园地&amp;quot;)
+reader.Seek(-6, 2)
+r, _, _ := reader.ReadRune()
+fmt.Printf(&amp;quot;%c\n&amp;quot;, r)
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;运行结果：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;园
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;strong&gt;小贴士&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;whence的值，在os包中定义了相应的常量，应该使用这些常量&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;const (
+SEEK_SET int = 0 // seek relative to the origin of the file
+SEEK_CUR int = 1 // seek relative to the current offset
+SEEK_END int = 2 // seek relative to the end
+)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h5 id=&#34;closer接口:1f9b02d070b8cc71a61fea0c5ae37919&#34;&gt;Closer接口&lt;/h5&gt;
+
+&lt;p&gt;接口定义如下：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;type Closer interface {
+Close() error
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;该接口比较简单，只有一个Close()方法，用于关闭数据流。&lt;/p&gt;
+
+&lt;p&gt;文件(os.File)、归档（压缩包）、数据库连接、Socket等需要手动关闭的资源都实现了Closer接口。
+实际编程中，经常将Close方法的调用放在defer语句中。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;小提示&lt;/strong&gt;
+初学者容易写出这样的代码：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;file, err := os.Open(&amp;quot;studygolang.txt&amp;quot;)
+        defer file.Close()
+        if err != nil {
+        ...
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;ul&gt;
+&lt;li&gt;当文件 studygolang.txt 不存在或找不到时，file.Close()会panic，因为file是nil。因此，应该将defer file.Close()放在错误检查之后。&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h5 id=&#34;其他接口:1f9b02d070b8cc71a61fea0c5ae37919&#34;&gt;其他接口&lt;/h5&gt;
+
+&lt;h6 id=&#34;bytereader和bytewriter:1f9b02d070b8cc71a61fea0c5ae37919&#34;&gt;ByteReader和ByteWriter&lt;/h6&gt;
+
+&lt;p&gt;通过名称大概也能猜出这组接口的用途：读或写一个字节。接口定义如下：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;type ByteReader interface {
+ReadByte() (c byte, err error)
+}
+type ByteWriter interface {
+WriteByte(c byte) error
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;在标准库中，有如下类型实现了io.ByteReader或io.ByteWriter:
+&lt;span style=&#34;background-color: rgb(255, 0, 0);&#34;&gt;- bufio.Reader/Writer 分别实现了io.ByteReader和io.ByteWriter
+- bytes.Buffer 同时实现了io.ByteReader和io.ByteWriter
+- bytes.Reader 实现了io.ByteReader
+- strings.Reader 实现了io.ByteReader&lt;/span&gt;&lt;/p&gt;
+
+&lt;p&gt;接下来的示例中，我们通过bytes.Buffer来一次读取或写入一个字节（主要代码）：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;package main
+import (
+&amp;quot;bytes&amp;quot;
+&amp;quot;fmt&amp;quot;
+)
+func main() {
+var ch byte
+fmt.Scanf(&amp;quot;%c\n&amp;quot;, &amp;amp;ch)
+              buffer := new(bytes.Buffer)
+err := buffer.WriteByte(ch)
+if err == nil {
+    fmt.Println(&amp;quot;写入一个字节成功！准备读取该字节……&amp;quot;)
+    newCh, _ := buffer.ReadByte()
+    fmt.Printf(&amp;quot;读取的字节：%c\n&amp;quot;, newCh)
+} else {
+    fmt.Println(&amp;quot;写入错误&amp;quot;)
+}
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;程序从标准输入接收一个字节（ASCII字符），调用buffer的WriteByte将该字节写入buffer中，之后通过ReadByte读取该字节。&lt;/p&gt;
+
+&lt;p&gt;一般地，我们不会使用bytes.Buffer来一次读取或写入一个字节。那么，这两个接口有哪些用处呢？&lt;/p&gt;
+
+&lt;p&gt;在标准库encoding/binary中，实现Varints读取，就需要一个io.ByteReader类型的参数，也就是说，它需要一个字节一个字节的读取。关于encoding/binary包在后面会详细介绍。&lt;/p&gt;
+
+&lt;p&gt;在标准库image/jpeg中，Encode函数的内部实现使用了ByteWriter写入一个字节。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;小贴士&lt;/strong&gt;
+可以通过在Go语言源码src/pkg中搜索&amp;rdquo;io.ByteReader&amp;rdquo;或&amp;rdquo;io.ByteWiter&amp;rdquo;，获得哪些地方用到了这两个接口。你会发现，这两个接口在二进制数据或归档压缩时用的比较多。&lt;/p&gt;
+
+&lt;h6 id=&#34;bytescanner-runereader和runescanner:1f9b02d070b8cc71a61fea0c5ae37919&#34;&gt;ByteScanner、RuneReader和RuneScanner&lt;/h6&gt;
+
+&lt;p&gt;将这三个接口放在一起，是考虑到与ByteReader相关或相应。&lt;/p&gt;
+
+&lt;p&gt;ByteScanner接口的定义如下：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;type ByteScanner interface {
+    ByteReader
+    UnreadByte() error
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;可见，它内嵌了ByteReader接口（可以理解为继承了ByteReader接口），UnreadByte方法的意思是：将上一次ReadByte的 字节还原，使得再次调用ReadByte返回的结果和上一次调用相同，也就是说，UnreadByte是重置上一次的ReadByte。注 意，UnreadByte调用之前必须调用了ReadByte，且不能连续调用UnreadByte。即：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;buffer := bytes.NewBuffer([]byte{&#39;a&#39;, &#39;b&#39;})
+err := buffer.UnreadByte()
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;和&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;package main
+    import (
+    &amp;quot;bytes&amp;quot;
+    &amp;quot;fmt&amp;quot;
+)
+func main() {
+    buffer := bytes.NewBuffer([]byte{&#39;a&#39;, &#39;b&#39;})
+    buffer.ReadByte()
+    buffer.ReadByte()
+    err := buffer.UnreadByte()
+    fmt.Println(err) //&amp;lt;nil&amp;gt;    
+    err = buffer.UnreadByte()
+    fmt.Println(err) //  bytes.Buffer: UnreadByte: previous operation was not a read
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;err都非nil，错误为：&lt;code&gt;bytes.Buffer: UnreadByte: previous operation was not a read&lt;/code&gt;&lt;/p&gt;
+
+&lt;h6 id=&#34;runereader接口和bytereader类似-只是readrune方法读取单个utf-8字符-返回其rune和该字符占用的字节数-该接口在regexp包有用到:1f9b02d070b8cc71a61fea0c5ae37919&#34;&gt;RuneReader接口和ByteReader类似，只是ReadRune方法读取单个UTF-8字符，返回其rune和该字符占用的字节数。该接口在regexp包有用到。&lt;/h6&gt;
+
+&lt;p&gt;######RuneScanner接口和ByteScanner类似，就不赘述了。&lt;/p&gt;
+
+&lt;p&gt;ReadCloser、ReadSeeker、ReadWriteCloser、ReadWriteSeeker、ReadWriter、WriteCloser和WriteSeeker接口&lt;/p&gt;
+
+&lt;p&gt;这些接口是上面介绍的接口的两个或三个组合而成的新接口。例如ReadWriter接口：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;type ReadWriter interface {
+    Reader
+    Writer
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;这是Reader接口和Writer接口的简单组合（内嵌）。&lt;/p&gt;
+
+&lt;p&gt;这些接口的作用是：有些时候同时需要某两个接口的所有功能，即必须同时实现了某两个接口的类型才能够被传入使用。可见，io包中有大量的&amp;rdquo;小接口&amp;rdquo;，这样方便组合为&amp;rdquo;大接口&amp;rdquo;。&lt;/p&gt;
+
+&lt;h6 id=&#34;sectionreader-类型:1f9b02d070b8cc71a61fea0c5ae37919&#34;&gt;SectionReader 类型&lt;/h6&gt;
+
+&lt;p&gt;SectionReader是一个struct（没有任何导出的字段），实现了 Read, Seek 和 ReadAt，同时，内嵌了 ReaderAt 接口。结构定义如下：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;type SectionReader struct {
+    r     ReaderAt // 该类型最终的 Read/ReadAt 最终都是通过 r 的 ReadAt 实现
+    base  int64    // NewSectionReader 会将 base 设置为 off
+    off   int64    // 从 r 中的 off 偏移处开始读取数据
+    limit int64    // limit - off = SectionReader 流的长度
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;从名称我们可以猜到，该类型读取数据流中部分数据。看一下&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;func NewSectionReader(r ReaderAt, off int64, n int64) *SectionReader&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;的文档说明就知道了：&lt;/p&gt;
+
+&lt;p&gt;NewSectionReader 返回一个 SectionReader，它从 r 中的偏移量 off 处读取 n 个字节后以 EOF 停止。&lt;/p&gt;
+
+&lt;p&gt;也就是说，SectionReader 只是内部（内嵌）ReaderAt表示的数据流的一部分：从 off 开始后的n个字节。&lt;/p&gt;
+
+&lt;p&gt;这个类型的作用是：方便重复操作某一段(section)数据流；或者同时需要ReadAt和Seek的功能。&lt;/p&gt;
+
+&lt;p&gt;由于该类型所支持的操作，前面都有介绍，因此提供示例代码了。&lt;/p&gt;
+
+&lt;p&gt;关于该类型在标准库中的使用，我们在 [archive/zip — zip归档访问]() 会讲到。&lt;/p&gt;
+
+&lt;h6 id=&#34;limitedreader-类型:1f9b02d070b8cc71a61fea0c5ae37919&#34;&gt;LimitedReader 类型&lt;/h6&gt;
+
+&lt;p&gt;LimitedReader 类型定义如下：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;type LimitedReader struct {
+    R Reader // underlying reader，最终的读取操作通过 R.Read 完成
+    N int64  // max bytes remaining
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;文档说明如下：&lt;/p&gt;
+
+&lt;blockquote&gt;
+&lt;p&gt;从 R 读取但将返回的数据量限制为 N 字节。每调用一次 Read 都将更新 N 来反应新的剩余数量。
+也就是说，最多只能返回 N 字节数据。
+LimitedReader只实现了Read方法（Reader接口）。&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;使用示例如下：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;package main
+import (
+    &amp;quot;fmt&amp;quot;
+    &amp;quot;io&amp;quot;
+    &amp;quot;strings&amp;quot;
+)
+func main() {
+    content := &amp;quot;This Is LimitReader Example&amp;quot;
+    reader := strings.NewReader(content)
+    limitReader := &amp;amp;io.LimitedReader{R: reader, N: 20}
+    for limitReader.N &amp;gt; 0 {
+        tmp := make([]byte, 2)
+        limitReader.Read(tmp)
+        fmt.Printf(&amp;quot;%s&amp;quot;, tmp)
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;运行结果：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;This Is LimitReader    
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;可见，通过该类型可以达到 &lt;em&gt;只允许读取一定长度数据&lt;/em&gt; 的目的。&lt;/p&gt;
+
+&lt;p&gt;在io包中，LimitReader 函数的实现其实就是调用 LimitedReader：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;func LimitReader(r Reader, n int64) Reader { return &amp;amp;LimitedReader{r, n} }
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;PipReader 和 PipWriter 类型&lt;/p&gt;
+
+&lt;p&gt;PipReader（一个没有任何导出字段的struct）是管道的读取端。它实现了io.Reader和io.Closer接口。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;关于 Read 方法的说明&lt;/strong&gt;：
+&amp;gt; 从管道中读取数据。该方法会堵塞，直到管道写入端开始写入数据或写入端关闭了。如果写入端关闭时带上了error（即调用CloseWithError关闭），该方法返回的err就是写入端传递的error；否则err为EOF。&lt;/p&gt;
+
+&lt;p&gt;PipWriter（一个没有任何导出字段的struct）是管道的写入端。它实现了io.Writer和io.Closer接口。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;关于 Write 方法的说明&lt;/strong&gt;：
+&amp;gt; 写数据到管道中。该方法会堵塞，直到管道读取端读完所有数据或读取端关闭了。如果读取端关闭时带上了error（即调用CloseWithError关闭），该方法返回的err就是读取端传递的error；否则err为 ErrClosedPipe。&lt;/p&gt;
+
+&lt;p&gt;其他方法的使用通过例子一起讲解：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;package main
+import (
+    &amp;quot;errors&amp;quot;
+    &amp;quot;fmt&amp;quot;
+    &amp;quot;io&amp;quot;
+    &amp;quot;time&amp;quot;
+)
+func main() {
+    Pipe()
+}
+func Pipe() {
+    pipeReader, pipeWriter := io.Pipe()
+    go PipeRead(pipeReader)
+    PipeWrite(pipeWriter)
+    time.Sleep(1e7)
+}
+
+func PipeWrite(pipeWriter *io.PipeWriter) {
+    var (
+        i   = 0
+        err error
+        n   int
+    )
+    data := []byte(&amp;quot;Go语言学习园地&amp;quot;)
+    for _, err = pipeWriter.Write(data); err == nil; n, err = pipeWriter.Write(data) {
+        i++
+        if i == 3 {
+            pipeWriter.CloseWithError(errors.New(&amp;quot;输出3次后结束&amp;quot;))
+        }
+    }
+    fmt.Println(&amp;quot;close 后输出的字节数：&amp;quot;, n, &amp;quot; error：&amp;quot;, err)
+}
+
+func PipeRead(pipeReader *io.PipeReader) {
+    var (
+        err error
+        n   int
+    )
+    data := make([]byte, 1024)
+    for n, err = pipeReader.Read(data); err == nil; n, err = pipeReader.Read(data) {
+        fmt.Printf(&amp;quot;%s\n&amp;quot;, data[:n])
+    }
+    fmt.Println(&amp;quot;writer 端 closewitherror后：&amp;quot;, err)
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;运行结果：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;Go语言学习园地
+Go语言学习园地
+Go语言学习园地
+close 后输出的字节数： 0  error： io: read/write on closed pipe
+writer 端 closewitherror后： 输出3次后结束
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;代码分析：&lt;/p&gt;
+
+&lt;p&gt;io.Pipe()用于创建创建一个同步的内存管道（synchronous in-memory pipe），函数签名：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;func Pipe() (*PipeReader, *PipeWriter)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;它将 io.Reader 连接到 io.Writer。一端的读取匹配另一端的写入，直接在这两端之间复制数据；它没有内部缓存。它对于并行调用 Read 和 Write 以及其它函数或 Close 来说都是安全的，并行安全。 一旦等待的I/O结束，Close 就会完成。并行调用 Read 或并行调用 Write 也同样安全： 同种类的调用将按顺序进行控制。稍候我们会分析管道相关的源码。
+正因为是同步的（其原理和无缓存channel类似），因此不能在一个goroutine中进行读和写。&lt;/p&gt;
+
+&lt;h6 id=&#34;copy-和-copyn-函数:1f9b02d070b8cc71a61fea0c5ae37919&#34;&gt;Copy 和 CopyN 函数&lt;/h6&gt;
+
+&lt;p&gt;&lt;strong&gt;Copy 函数&lt;/strong&gt;的：
+    func Copy(dst Writer, src Reader) (written int64, err error)
+函数文档：&lt;/p&gt;
+
+&lt;blockquote&gt;
+&lt;p&gt;Copy 将 src 复制到 dst，直到在 src 上到达 EOF 或发生错误。它返回复制的字节数，如果有的话，还会返回在复制时遇到的第一个错误。
+成功的 Copy 返回 err == nil，而非 err == EOF。由于 Copy 被定义为从 src 读取直到 EOF 为止，因此它不会将来自 Read 的 EOF 当做错误来报告。
+若 dst 实现了 ReaderFrom 接口，其复制操作可通过调用 dst.ReadFrom(src) 实现。此外，若 dst 实现了 WriterTo 接口，其复制操作可通过调用 src.WriteTo(dst) 实现。&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;代码：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;io.Copy(os.Stdout, strings.NewReader(&amp;quot;Go语言学习园地&amp;quot;))
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;直接将内容输出（写入Stdout中）。&lt;/p&gt;
+
+&lt;p&gt;我们甚至可以这么做：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;package main
+import (
+    &amp;quot;fmt&amp;quot;
+    &amp;quot;io&amp;quot;
+    &amp;quot;os&amp;quot;
+)
+func main() {
+    io.Copy(os.Stdout, os.Stdin)//  可用来复制文件
+    fmt.Println(&amp;quot;Got EOF -- bye&amp;quot;)
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;执行：echo &amp;ldquo;Hello, World&amp;rdquo; | go run main.go`&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;func CopyFile(srcName, dstName string) (written int64, err error) {
+        src, err := os.Open(srcName)
+        defer src.Close()
+        if err != nil {
+                return
+        }
+        dst, err := os.OpenFile(dstName, os.O_WRONLY|os.O_CREATE, 0644)
+        defer dst.Close()
+        if err != nil {
+                return
+        }
+        return io.Copy(dst, src)
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;strong&gt;CopyN 函数&lt;/strong&gt;的签名：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;func CopyN(dst Writer, src Reader, n int64) (written int64, err error)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;函数文档：
+&amp;gt; CopyN 将 n 个字节从 src 复制到 dst。 它返回复制的字节数以及在复制时遇到的最早的错误。由于 Read 可以返回要求的全部数量及一个错误（包括 EOF），因此 CopyN 也能如此。
+&amp;gt; 若 dst 实现了 ReaderFrom 接口，复制操作也就会使用它来实现。
+&lt;span style=&#34;color:#FF0000;&#34;&gt;注：只有当written＝n时，返回的err才为nil,否则都不为nil&lt;/span&gt;
+代码：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;io.CopyN(os.Stdout, strings.NewReader(&amp;quot;Go语言学习园地&amp;quot;), 8)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;会输出：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;Go语言
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h6 id=&#34;readatleast-和-readfull-函数:1f9b02d070b8cc71a61fea0c5ae37919&#34;&gt;ReadAtLeast 和 ReadFull 函数&lt;/h6&gt;
+
+&lt;p&gt;&lt;strong&gt;ReadAtLeast 函数&lt;/strong&gt;的签名：&lt;/p&gt;
+
+&lt;p&gt;func ReadAtLeast(r Reader, buf []byte, min int) (n int, err error)
+函数文档：
+&amp;gt; ReadAtLeast 将 r 读取到 buf 中，直到读了最少 min 个字节为止。它返回复制的字节数，如果读取的字节较少，还会返回一个错误。若没有读取到字节，错误就只是 EOF。如果一个 EOF 发生在读取了少于 min 个字节之后，ReadAtLeast 就会返回 ErrUnexpectedEOF。若 min 大于 buf 的长度，ReadAtLeast 就会返回 ErrShortBuffer。对于返回值，当且仅当 err == nil 时，才有 n &amp;gt;= min。
+一般可能不太会用到这个函数。使用时需要注意返回的error判断。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;ReadFull 函数&lt;/strong&gt;的签名：
+func ReadFull(r Reader, buf []byte) (n int, err error)
+函数文档：
+&amp;gt; ReadFull 精确地从 r 中将 len(buf) 个字节读取到 buf 中。它返回复制的字节数，如果读取的字节较少，还会返回一个错误。若没有读取到字节，错误就只是 EOF。如果一个 EOF 发生在读取了一些但不是所有的字节后，ReadFull 就会返回 ErrUnexpectedEOF。对于返回值，当且仅当 err == nil 时，才有 n == len(buf)。
+注意该函数和ReadAtLeast的区别：ReadFull 将buf读满；而ReadAtLeast是最少读取min个字节。&lt;/p&gt;
+
+&lt;h6 id=&#34;writestring-函数:1f9b02d070b8cc71a61fea0c5ae37919&#34;&gt;WriteString 函数&lt;/h6&gt;
+
+&lt;p&gt;这是为了方便写入string类型提供的函数，函数签名：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;func WriteString(w Writer, s string) (n int, err error)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;当 w 实现了 WriteString 方法时，直接调用该方法，否则执行w.Write([]byte(s))。&lt;/p&gt;
+
+&lt;h6 id=&#34;multireader-和-multiwriter-函数:1f9b02d070b8cc71a61fea0c5ae37919&#34;&gt;MultiReader 和 MultiWriter 函数&lt;/h6&gt;
+
+&lt;p&gt;这两个函数的定义分别是：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;func MultiReader(readers ...Reader) Reader
+func MultiWriter(writers ...Writer) Writer
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;它们接收多个Reader或Writer，返回一个Reader或Writer。我们可以猜想到这两个函数就是操作多个Reader或Writer就像操作一个。&lt;/p&gt;
+
+&lt;p&gt;事实上，在io包中定义了两个非导出类型：mutilReader和multiWriter，它们分别实现了io.Reader和io.Writer接口。类型定义为：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;type multiReader struct {
+  readers []Reader
+}
+type multiWriter struct {
+   writers []Writer
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;对于这两种类型对应的实现方法（Read和Write方法）的使用，我们通过例子来演示。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;MultiReader的使用&lt;/strong&gt;：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;package main
+import (
+    &amp;quot;bytes&amp;quot;
+    &amp;quot;fmt&amp;quot;
+    &amp;quot;io&amp;quot;
+    &amp;quot;strings&amp;quot;
+)
+func main() {
+    readers := []io.Reader{
+        strings.NewReader(&amp;quot;from strings reader&amp;quot;),
+        bytes.NewBufferString(&amp;quot;from bytes buffer&amp;quot;),
+    }
+    reader := io.MultiReader(readers...)
+    data := make([]byte, 0, 1024)
+    var (
+        err error
+        n   int
+    )
+    for err != io.EOF {
+        tmp := make([]byte, 512)
+        n, err = reader.Read(tmp)
+        if err == nil {
+            data = append(data, tmp[:n]...)
+        } else {
+            if err != io.EOF {
+                panic(err)
+            }
+        }
+    }
+    fmt.Printf(&amp;quot;%s\n&amp;quot;, data)
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;运行结果：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;from strings readerfrom bytes buffer
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;代码中首先构造了一个io.Reader的slice，由 strings.Reader 和 bytes.Buffer 两个实例组成，然后通过MultiReader得到新的Reader，循环读取新Reader中的内容。从输出结果可以看到，第 一次调用Reader的Read方法获取到的是slice中第一个元素的内容……也就是说，MultiReader只是逻辑上将多个Reader组合起 来，并不能通过调用一次Read方法获取所有Reader的内容。在所有的Reader内容都被读完后，Reader会返回EOF。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;MultiWriter的使用&lt;/strong&gt;：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;package main
+import (
+    &amp;quot;io&amp;quot;
+    &amp;quot;os&amp;quot;
+)
+func main() {
+file, err := os.Create(&amp;quot;tmp.txt&amp;quot;)
+    if err != nil {
+        panic(err)
+    }
+    defer file.Close()
+    writers := []io.Writer{
+        os.Stdout,
+        file,
+    }
+    writer := io.MultiWriter(writers...)
+    writer.Write([]byte(&amp;quot;hello,world&amp;quot;))
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;这段程序执行后在生成tmp.txt文件，同时在文件和屏幕中都输出：hello world。&lt;/p&gt;
+
+&lt;h6 id=&#34;teereader函数:1f9b02d070b8cc71a61fea0c5ae37919&#34;&gt;TeeReader函数&lt;/h6&gt;
+
+&lt;p&gt;函数签名如下：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;func TeeReader(r Reader, w Writer) Reader
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;TeeReader 返回一个 Reader，它将从 r 中读到的数据写入 w 中。所有经由它处理的从 r 的读取都匹配于对应的对 w 的写入。它没有内部缓存，即写入必须在读取完成前完成。任何在写入时遇到的错误都将作为读取错误返回。&lt;/p&gt;
+
+&lt;p&gt;也就是说，我们通过Reader读取内容后，会自动写入到Writer中去。例子代码如下：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;package main
+import (
+    &amp;quot;fmt&amp;quot;
+    &amp;quot;io&amp;quot;
+    &amp;quot;os&amp;quot;
+    &amp;quot;strings&amp;quot;
+)
+func main() {
+    reader := io.TeeReader(strings.NewReader(&amp;quot;Go语言学习园地&amp;quot;), os.Stdout)
+    p := make([]byte, 20)
+    n, err := reader.Read(p)
+    fmt.Println(string(p), n, err)
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;输出结果：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt; Go语言学习园地Go语言学习园地 20 &amp;lt;nil&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;这种功能的实现其实挺简单，无非是在Read完后执行Write。&lt;/p&gt;
+
+&lt;p&gt;至此，io所有接口、类型和函数都讲解完成。&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>【原创】一个函数解决http发送</title>
+      <link>http://106.186.127.250:1313/blog/golang/%E4%B8%80%E8%A1%8C%E5%87%BD%E6%95%B0%E8%A7%A3%E5%86%B3http%E5%8F%91%E9%80%81/</link>
+      <pubDate>Tue, 20 Oct 2015 16:30:09 +0800</pubDate>
+      
+      <guid>http://106.186.127.250:1313/blog/golang/%E4%B8%80%E8%A1%8C%E5%87%BD%E6%95%B0%E8%A7%A3%E5%86%B3http%E5%8F%91%E9%80%81/</guid>
       <description>
 
 &lt;p&gt;golang发送http请求，是用Net/http包处理。http发送请求，其实都是由client.Do这个函数处理的。其他发送函数比如 Post、PostForm、Get函数，都是经过处理后调用client.DO进行处理。所以我们其实可以经过利用一个函数处理所有常用的发送请求。
@@ -171,10 +1447,10 @@ func (query *HttpQuery) DoQuery() error {
     
     <item>
       <title>【原创】无缓存channel及日常用法</title>
-      <link>http://106.186.127.250:1313/golang/%E6%97%A0%E7%BC%93%E5%AD%98channel%E5%8F%8A%E5%B8%B8%E7%94%A8%E6%B3%95/</link>
+      <link>http://106.186.127.250:1313/blog/golang/%E6%97%A0%E7%BC%93%E5%AD%98channel%E5%8F%8A%E5%B8%B8%E7%94%A8%E6%B3%95/</link>
       <pubDate>Tue, 20 Oct 2015 16:30:09 +0800</pubDate>
       
-      <guid>http://106.186.127.250:1313/golang/%E6%97%A0%E7%BC%93%E5%AD%98channel%E5%8F%8A%E5%B8%B8%E7%94%A8%E6%B3%95/</guid>
+      <guid>http://106.186.127.250:1313/blog/golang/%E6%97%A0%E7%BC%93%E5%AD%98channel%E5%8F%8A%E5%B8%B8%E7%94%A8%E6%B3%95/</guid>
       <description>
 
 &lt;h5 id=&#34;当没有对channel读取的操作的时候-发送操作会阻塞-看下面例子:aa1780b59ea5c50d8457e0a0fcd09cd3&#34;&gt;当没有对channel读取的操作的时候，发送操作会阻塞。看下面例子&lt;/h5&gt;
@@ -486,12 +1762,463 @@ func main() {
     </item>
     
     <item>
-      <title>新博客，新征程</title>
-      <link>http://106.186.127.250:1313/%E7%94%9F%E6%B4%BB/%E6%96%B0%E5%8D%9A%E5%AE%A2/</link>
+      <title>【转】golang测试技术</title>
+      <link>http://106.186.127.250:1313/blog/golang/%E6%B5%8B%E8%AF%95%E6%8A%80%E6%9C%AF/</link>
       <pubDate>Tue, 20 Oct 2015 16:30:09 +0800</pubDate>
       
-      <guid>http://106.186.127.250:1313/%E7%94%9F%E6%B4%BB/%E6%96%B0%E5%8D%9A%E5%AE%A2/</guid>
-      <description></description>
+      <guid>http://106.186.127.250:1313/blog/golang/%E6%B5%8B%E8%AF%95%E6%8A%80%E6%9C%AF/</guid>
+      <description>
+
+&lt;p&gt;本篇文章内容来源于 Golang核心开发组成员 Andrew Gerrand在Google I/O 2014的一次主题分享“ Testing Techniques”，即介绍使用Golang开发 时会使用到的测试技术（主要针对 单元测试），包括基本技术、高级技术（并发测试、 mock/fake、 竞争条件测试、并发测试、内/外部测 试、vet工具等）等，感觉总结的很全面，这里整理记录下来，希望能给大家带来帮助。原Slide访问需要自己搭梯子。另外这里也要吐槽一 下：Golang官方站的slide都是以一种特有的golang artical的格式放出的，没法像pdf那样下载，在国内使用和传播极其不便。&lt;/p&gt;
+
+&lt;h3 id=&#34;一-基础测试技术:0731d049fe69f4c0b41b2c4dde1a8d81&#34;&gt;一、基础测试技术&lt;/h3&gt;
+
+&lt;h4 id=&#34;测试go代码:0731d049fe69f4c0b41b2c4dde1a8d81&#34;&gt;测试Go代码&lt;/h4&gt;
+
+&lt;p&gt;Go语言内置测试框架。&lt;/p&gt;
+
+&lt;p&gt;内置的测试框架通过testing包以及go test命令来提供测试功能。&lt;/p&gt;
+
+&lt;p&gt;下面是一个完整的测试strings.Index函数的完整测试文件：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;//strings_test.go (这里样例代码放入strings_test.go文件中)
+package strings_test
+
+import (
+    “strings”
+    “testing”
+)
+
+func TestIndex(t *testing.T) {
+    const s, sep, want = “chicken”, “ken”, 4
+    got := strings.Index(s, sep)
+    if got != want {
+        t.Errorf(“Index(%q,%q) = %v; want %v”, s, sep, got, want)// 注意原slide中 的got和want写反了
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;测试&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$go test -v strings_test.go
+=== RUN TestIndex
+— PASS: TestIndex (0.00 seconds)
+PASS
+ok      command-line-arguments    0.007s
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;go test的-v选项是表示输出详细的执行信息。&lt;/p&gt;
+
+&lt;p&gt;将代码中的want常量值修改为3，我们制造一个无法通过的测试：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$go test -v strings_test.go
+=== RUN TestIndex
+— FAIL: TestIndex (0.00 seconds)
+strings_test.go:12: Index(“chicken”,”ken”) = 4; want 3
+FAIL
+exit status 1
+FAIL    command-line-arguments    0.008s
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h4 id=&#34;表驱动测试:0731d049fe69f4c0b41b2c4dde1a8d81&#34;&gt;表驱动测试&lt;/h4&gt;
+
+&lt;p&gt;Golang的struct字面值(struct literals)语法让我们可以轻松写出表驱动测试。&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;package strings_test
+
+import (
+    “strings”
+    “testing”
+)
+
+func TestIndex(t *testing.T) {
+    var tests = []struct {
+        s   string
+        sep string
+        out int
+    }{ {“”, “”, 0}, {“”, “a”, -1}, {“fo”, “foo”, -1}, {“foo”, “foo”, 0}, {“oofofoofooo”, “f”,2} }
+for _, test := range tests {
+    actual := strings.Index(test.s, test.sep)
+    if actual != test.out {
+        t.Errorf(“Index(%q,%q) = %v; want %v”,
+        test.s, test.sep, actual, test.out)
+        }
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;测试&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$go test -v strings_test.go
+=== RUN TestIndex
+— PASS: TestIndex (0.00 seconds)
+PASS
+ok      command-line-arguments    0.007s
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h4 id=&#34;t结构:0731d049fe69f4c0b41b2c4dde1a8d81&#34;&gt;T结构&lt;/h4&gt;
+
+&lt;p&gt;*testing.T参数用于错误报告：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;t.Errorf(“got bar = %v, want %v”, got, want)
+t.Fatalf(“Frobnicate(%v) returned error: %v”, arg, err)
+t.Logf(“iteration %v”, i)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;也可以用于enable并行测试(parallet test)：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;t.Parallel()
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;控制一个测试是否运行：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;if runtime.GOARCH == “arm” {
+    t.Skip(“this doesn’t work on ARM”)
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h4 id=&#34;运行测试:0731d049fe69f4c0b41b2c4dde1a8d81&#34;&gt;运行测试&lt;/h4&gt;
+
+&lt;p&gt;我们用go test命令来运行特定包的测试。&lt;/p&gt;
+
+&lt;p&gt;默认执行当前路径下包的测试代码。&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ go test
+PASS
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;测试&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ go test -v
+=== RUN TestIndex
+— PASS: TestIndex (0.00 seconds)
+PASS
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;要运行工程下的所有测试，我们执行如下命令：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ go test github.com/nf/…
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;标准库的测试：
+    $ go test std&lt;/p&gt;
+
+&lt;blockquote&gt;
+&lt;p&gt;注：假设strings_test.go的当前目录为testgo，在testgo目录下执行go test都是OK的。但如果我们切换到testgo的上一级目录执行go test，我们会得到什么结果呢？&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;pre&gt;&lt;code&gt;$go test testgo
+can’t load package: package testgo: cannot find package “testgo” in any of:
+/usr/local/go/src/pkg/testgo (from $GOROOT)
+/Users/tony/Test/GoToolsProjects/src/testgo (from $GOPATH)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;提示找不到testgo这个包，go test后面接着的应该是一个包名，go test会在GOROOT和GOPATH下查找这个包并执行包的测试。&lt;/p&gt;
+
+&lt;h4 id=&#34;测试覆盖率:0731d049fe69f4c0b41b2c4dde1a8d81&#34;&gt;测试覆盖率&lt;/h4&gt;
+
+&lt;p&gt;go tool命令可以报告测试覆盖率统计。&lt;/p&gt;
+
+&lt;p&gt;我们在testgo下执行go test -cover，结果如下：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;go build _/Users/tony/Test/Go/testgo: no buildable Go source files in /Users/tony/Test/Go/testgo
+FAIL    _/Users/tony/Test/Go/testgo [build failed]
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;显然通过cover参数选项计算测试覆盖率不仅需要测试代码，还要有被测对象（一般是函数）的源码文件。&lt;/p&gt;
+
+&lt;p&gt;我们将目录切换到$GOROOT/src/pkg/strings下，执行go test -cover：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$go test -v -cover
+=== RUN TestReader
+— PASS: TestReader (0.00 seconds)
+… …
+=== RUN: ExampleTrimPrefix
+— PASS: ExampleTrimPrefix (1.75us)
+PASS
+coverage: 96.9% of statements
+ok      strings    0.612s
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;go test可以生成覆盖率的profile文件，这个文件可以被go tool cover工具解析。&lt;/p&gt;
+
+&lt;p&gt;在$GOROOT/src/pkg/strings下面执行：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ go test -coverprofile=cover.out
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;会再当前目录下生成cover.out文件。&lt;/p&gt;
+
+&lt;p&gt;查看cover.out文件，有两种方法：&lt;/p&gt;
+
+&lt;p&gt;a) cover -func=cover.out&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$sudo go tool cover -func=cover.out
+strings/reader.go:24:    Len                66.7%
+strings/reader.go:31:    Read                100.0%
+strings/reader.go:44:    ReadAt                100.0%
+strings/reader.go:59:    ReadByte            100.0%
+strings/reader.go:69:    UnreadByte            100.0%
+… …
+strings/strings.go:638:    Replace                100.0%
+strings/strings.go:674:    EqualFold            100.0%
+total:            (statements)            96.9%
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;b) 可视化查看&lt;/p&gt;
+
+&lt;p&gt;执行go tool cover -html=cover.out命令，会在/tmp目录下生成目录coverxxxxxxx，比如/tmp/cover404256298。目录下有一个 coverage.html文件。用浏览器打开coverage.html，即可以可视化的查看代码的测试覆盖情况。&lt;/p&gt;
+
+&lt;p&gt;关于go tool的cover命令，我的go version go1.3 darwin/amd64默认并不自带，需要通过go get下载。&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$sudo GOPATH=/Users/tony/Test/GoToolsProjects go get code.google.com/p/go.tools/cmd/cover
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;下载后，cover安装在$GOROOT/pkg/tool/darwin_amd64下面。&lt;/p&gt;
+
+&lt;h3 id=&#34;高级测试技术:0731d049fe69f4c0b41b2c4dde1a8d81&#34;&gt;高级测试技术&lt;/h3&gt;
+
+&lt;h4 id=&#34;一个例子程序:0731d049fe69f4c0b41b2c4dde1a8d81&#34;&gt;一个例子程序&lt;/h4&gt;
+
+&lt;p&gt;outyet是一个web服务，用于宣告某个特定Go版本是否已经打标签发布了。其获取方法：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;go get github.com/golang/example/outyet
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;blockquote&gt;
+&lt;p&gt;注：
+go get执行后，cd $GOPATH/src/github.com/golang/example/outyet下，执行go run main.go。然后用浏览器打开&lt;a href=&#34;http://localhost:8080即可访问该Web服务了。&#34;&gt;http://localhost:8080即可访问该Web服务了。&lt;/a&gt;&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;h4 id=&#34;测试http客户端和服务端:0731d049fe69f4c0b41b2c4dde1a8d81&#34;&gt;测试Http客户端和服务端&lt;/h4&gt;
+
+&lt;p&gt;net/http/httptest包提供了许多帮助函数，用于测试那些发送或处理Http请求的代码。&lt;/p&gt;
+
+&lt;h4 id=&#34;httptest-server:0731d049fe69f4c0b41b2c4dde1a8d81&#34;&gt;httptest.Server&lt;/h4&gt;
+
+&lt;p&gt;httptest.Server在本地回环网口的一个系统选择的端口上listen。它常用于端到端的HTTP测试。&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;type Server struct {
+    URL      string // base URL of form http://ipaddr:port with no trailing slash
+    Listener net.Listener
+
+    // TLS is the optional TLS configuration, populated with a new config
+    // after TLS is started. If set on an unstarted server before StartTLS
+    // is called, existing fields are copied into the new config.
+    TLS *tls.Config
+
+    // Config may be changed after calling NewUnstartedServer and
+    // before Start or StartTLS.
+    Config *http.Server
+}
+
+func NewServer(handler http.Handler) *Server
+
+func (*Server) Close() error
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h4 id=&#34;httptest-server实战:0731d049fe69f4c0b41b2c4dde1a8d81&#34;&gt;httptest.Server实战&lt;/h4&gt;
+
+&lt;p&gt;下面代码创建了一个临时Http Server，返回简单的Hello应答：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    fmt.Fprintln(w, “Hello, client”)
+}))
+defer ts.Close()
+
+res, err := http.Get(ts.URL)
+if err != nil {
+    log.Fatal(err)
+}
+
+greeting, err := ioutil.ReadAll(res.Body)
+res.Body.Close()
+if err != nil {
+    log.Fatal(err)
+}
+
+fmt.Printf(“%s”, greeting)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h4 id=&#34;httptest-responserecorder:0731d049fe69f4c0b41b2c4dde1a8d81&#34;&gt;httptest.ResponseRecorder&lt;/h4&gt;
+
+&lt;p&gt;httptest.ResponseRecorder是http.ResponseWriter的一个实现，用来记录变化，用在测试的后续检视中。&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;type ResponseRecorder struct {
+    Code      int           // the HTTP response code from WriteHeader
+    HeaderMap http.Header   // the HTTP response headers
+    Body      *bytes.Buffer // if non-nil, the bytes.Buffer to append written data to
+    Flushed   bool
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h4 id=&#34;httptest-responserecorder实战:0731d049fe69f4c0b41b2c4dde1a8d81&#34;&gt;httptest.ResponseRecorder实战&lt;/h4&gt;
+
+&lt;p&gt;向一个HTTP handler中传入一个ResponseRecorder，通过它我们可以来检视生成的应答。&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;handler := func(w http.ResponseWriter, r *http.Request) {
+    http.Error(w, “something failed”, http.StatusInternalServerError)
+}
+
+req, err := http.NewRequest(“GET”, “http://example.com/foo”, nil)
+if err != nil {
+    log.Fatal(err)
+}
+
+w := httptest.NewRecorder()
+handler(w, req)
+
+fmt.Printf(“%d – %s”, w.Code, w.Body.String())
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h4 id=&#34;竞争检测-race-detection:0731d049fe69f4c0b41b2c4dde1a8d81&#34;&gt;竞争检测(race detection)&lt;/h4&gt;
+
+&lt;p&gt;当两个goroutine并发访问同一个变量，且至少一个goroutine对变量进行写操作时，就会发生数据竞争（data race）。&lt;/p&gt;
+
+&lt;p&gt;为了协助诊断这种bug，Go提供了一个内置的数据竞争检测工具。&lt;/p&gt;
+
+&lt;p&gt;通过传入-race选项，go tool就可以启动竞争检测。&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ go test -race mypkg    // to test the package
+$ go run -race mysrc.go  // to run the source file
+$ go build -race mycmd   // to build the command
+$ go install -race mypkg // to install the package
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;注：一个数据竞争检测的例子&lt;/p&gt;
+
+&lt;p&gt;例子代码：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;//testrace.go
+
+package main
+
+import “fmt”
+import “time”
+
+func main() {
+    var i int = 0
+    go func() {
+    for {
+        i++
+        fmt.Println(“subroutine: i = “, i)
+        time.Sleep(1 * time.Second)
+    }
+}()
+
+for {
+    i++
+    fmt.Println(“mainroutine: i = “, i)
+    time.Sleep(1 * time.Second)
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;测试&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$go run -race testrace.go
+mainroutine: i =  1
+
+WARNING: DATA RACE
+Read by goroutine 5:
+main.func·001()
+/Users/tony/Test/Go/testrace.go:10 +0×49
+
+Previous write by main goroutine:
+main.main()
+/Users/tony/Test/Go/testrace.go:17 +0xd5
+
+Goroutine 5 (running) created at:
+main.main()
+/Users/tony/Test/Go/testrace.go:14 +0xaf
+
+subroutine: i =  2
+mainroutine: i =  3
+subroutine: i =  4
+mainroutine: i =  5
+subroutine: i =  6
+mainroutine: i =  7
+ubroutine: i =  8
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h4 id=&#34;测试并发-testing-with-concurrency:0731d049fe69f4c0b41b2c4dde1a8d81&#34;&gt;测试并发 （testing with concurrency)&lt;/h4&gt;
+
+&lt;p&gt;当测试并发代码时，总会有一种使用sleep的冲动。大多时间里，使用sleep既简单又有效。&lt;/p&gt;
+
+&lt;p&gt;但大多数时间不是”总是“。&lt;/p&gt;
+
+&lt;p&gt;我们可以使用Go的并发原语让那些奇怪不靠谱的sleep驱动的测试更加值得信赖。&lt;/p&gt;
+
+&lt;h4 id=&#34;使用静态分析工具vet查找错误:0731d049fe69f4c0b41b2c4dde1a8d81&#34;&gt;使用静态分析工具vet查找错误&lt;/h4&gt;
+
+&lt;p&gt;vet工具用于检测代码中程序员犯的常见错误：
+– 错误的printf格式
+– 错误的构建tag
+– 在闭包中使用错误的range循环变量
+– 无用的赋值操作
+– 无法到达的代码
+– 错误使用mutex
+等等。&lt;/p&gt;
+
+&lt;p&gt;使用方法：&lt;code&gt;go vet [package]&lt;/code&gt;&lt;/p&gt;
+
+&lt;h4 id=&#34;从内部测试:0731d049fe69f4c0b41b2c4dde1a8d81&#34;&gt;从内部测试&lt;/h4&gt;
+
+&lt;p&gt;golang中大多数测试代码都是被测试包的源码的一部分。这意味着测试代码可以访问包种未导出的符号以及内部逻辑。就像我们之前看到的那样。&lt;/p&gt;
+
+&lt;p&gt;注：比如$GOROOT/src/pkg/path/path_test.go与path.go都在path这个包下。&lt;/p&gt;
+
+&lt;h4 id=&#34;从外部测试:0731d049fe69f4c0b41b2c4dde1a8d81&#34;&gt;从外部测试&lt;/h4&gt;
+
+&lt;p&gt;有些时候，你需要从被测包的外部对被测包进行测试，比如测试代码在package foo_test下，而不是在package foo下。&lt;/p&gt;
+
+&lt;p&gt;这样可以打破依赖循环，比如：&lt;/p&gt;
+
+&lt;p&gt;– testing包使用fmt
+– fmt包的测试代码还必须导入testing包
+– 于是，fmt包的测试代码放在fmt_test包下，这样既可以导入testing包，也可以同时导入fmt包。&lt;/p&gt;
+
+&lt;h4 id=&#34;mocks和fakes:0731d049fe69f4c0b41b2c4dde1a8d81&#34;&gt;Mocks和fakes&lt;/h4&gt;
+
+&lt;p&gt;通过在代码中使用interface，Go可以避免使用mock和fake测试机制。&lt;/p&gt;
+
+&lt;p&gt;例如，如果你正在编写一个文件格式解析器，不要这样设计函数：&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;func Parser(f *os.File) error&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;作为替代，你可以编写一个接受interface类型的函数:&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;func Parser(r io.Reader) error&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;和bytes.Buffer、strings.Reader一样，*os.File也实现了io.Reader接口。&lt;/p&gt;
+
+&lt;h4 id=&#34;子进程测试:0731d049fe69f4c0b41b2c4dde1a8d81&#34;&gt;子进程测试&lt;/h4&gt;
+
+&lt;p&gt;有些时候，你需要测试的是一个进程的行为，而不仅仅是一个函数。例如：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;func Crasher() {
+    fmt.Println(“Going down in flames!”)
+    os.Exit(1)
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;为了测试上面的代码，我们将测试程序本身作为一个子进程进行测试：&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;func TestCrasher(t *testing.T) {
+    if os.Getenv(“BE_CRASHER”) == “1″ {
+        Crasher()
+        return
+    }
+    cmd := exec.Command(os.Args[0], “-test.run=TestCrasher”)
+    cmd.Env = append(os.Environ(), “BE_CRASHER=1″)
+    err := cmd.Run()
+    if e, ok := err.(*exec.ExitError); ok &amp;amp;&amp;amp; !e.Success() {
+        return
+    }
+    t.Fatalf(“process ran with err %v, want exit status 1″, err)
+}
+&lt;/code&gt;&lt;/pre&gt;
+</description>
     </item>
     
   </channel>
