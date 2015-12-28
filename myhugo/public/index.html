@@ -33,6 +33,9 @@
 <a href="/blog/docker">docker</h1></a></br>
 <a href="/blog/生活">生活</h1></a></br>
 <a href="/blog/golang">golang</h1></a></br>
+<a href="/blog/linux">linux</h1></a></br>
+<a href="/blog/python">python</h1></a></br>
+<a href="/blog/监控">监控</h1></a></br>
 </br><br>
 </br><br>
 </br><br>
@@ -46,7 +49,7 @@
     </div>
 
     <ul class="sidebar-nav">
-      <li><a href="/">Home</a> </li>
+      <li><a href="/blog">Home</a> </li>
       
     </ul>
 
@@ -76,6 +79,42 @@
 <p>个人github上没太多东西，个人一些东西后来都做到了公司的git里。有时间拆一拆，把个人的，无关公司的东西，整理一下。</p>
 
 <p>博主是北漂devops一名，现在主要写go语言，做集中化运维 及 各种拓展的平台、工具。</p>
+
+  </div>
+  
+  <div class="post">
+    <h1 class="post-title">
+      <a href="http://106.186.127.250:1313/blog/python/%E6%A8%A1%E5%9D%97/argparse/">
+        argparse 命令行参数解析模块
+      </a>
+    </h1>
+
+    <span class="post-date">Mon, Dec 21, 2015</span>
+
+    <p>python发展的时间很长,功能很全.是devops的得力工具.
+我的python太弱了,一直想写python的东西,做个积累.一直没有做,从argparse开始吧.</p>
+
+<pre><code>import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--list', action='append', dest='list', help='append')
+parser.add_argument('--false', action='store_false', dest='false',
+    help='store_false')
+parser.add_argument('--true', action='store_true', dest='true',
+    help='stroe_true')
+parser.add_argument('--foo', help='fault store action')
+
+print parser.parse_args('--foo 2'.split())
+#Namespace(false=True, foo='2', list=None, true=False)
+print parser.parse_args('--foo x'.split())
+#Namespace(false=True, foo='x', list=None, true=False)
+print parser.parse_args('--false'.split())
+#Namespace(false=False, foo=None, list=None, true=False)
+print parser.parse_args('--true'.split())
+#Namespace(false=True, foo=None, list=None, true=True)
+print parser.parse_args('--list 1, --list 2'.split())
+#Namespace(false=True, foo=None, list=['1,', '2'], true=False)
+</code></pre>
 
   </div>
   
@@ -327,6 +366,190 @@ func (r *Response) GenResponse(w http.ResponseWriter, status int) error {
   
   <div class="post">
     <h1 class="post-title">
+      <a href="http://106.186.127.250:1313/blog/docker/%E5%88%B6%E4%BD%9C%E5%B8%A6%E6%9C%89ssh%E7%9A%84ubantu%E9%95%9C%E5%83%8F/">
+        制作带有ssh的docker镜像,转,小修改并亲测
+      </a>
+    </h1>
+
+    <span class="post-date">Tue, Oct 20, 2015</span>
+
+    
+
+<h2 id="手动搞-然后commit:e26601a9b94b90b70d0c8c0bcf072033">手动搞，然后commit</h2>
+
+<p><strong>个人最爱的方式,我喜欢手动搞出来,然后用dockerfile搞启动命令/环境/网络等</strong></p>
+
+<p>步骤如下：</p>
+
+<p>首先，使用我们最熟悉的 「-ti」参数来创建一个容器(我之前的小黑是14.10的，所以没用04的，直接用的lastext):<code>$ sudo docker run -ti ubuntu  /bin/bash</code></p>
+
+<pre><code>root@fc1936ea8ceb:/# sshd
+bash: sshd: command not found
+</code></pre>
+
+<p>使用 sshd 开启 ssh server 服务,发现没有安装这个服务,注意，我们在使用 「-ti /bin/bash」 进入容器后，获得的是 root 用户的bash</p>
+
+<pre><code>root@fc1936ea8ceb:/# apt-get install openssh-server
+Reading package lists... Done
+Building dependency tree
+Reading state information... Done
+The following extra packages will be installed:
+ca-certificates krb5-locales libck-connector0 libedit2 libgssapi-krb5-2
+ libidn11 libk5crypto3 libkeyutils1 libkrb5-3 libkrb5support0
+ libpython-stdlib libpython2.7-minimal libpython2.7-stdlib libwrap0 libx11-6
+。。。。
+Do you want to continue? [Y/n] y    
+。。。，，
+Setting up ssh-import-id (3.21-0ubuntu1) ...
+Processing triggers for libc-bin (2.19-0ubuntu6.6) ...
+Processing triggers for ca-certificates (20130906ubuntu2) ...
+Updating certificates in /etc/ssl/certs... 164 added, 0 removed; done.
+Running hooks in /etc/ca-certificates/update.d....done.
+Processing triggers for ureadahead (0.100.0-16) ...
+</code></pre>
+
+<ul>
+<li>14.04的ubantu的docker镜像没有sshd，lastest是有的。<strong>如果要用04，还需要先升级下apt-get</strong></li>
+</ul>
+
+<p>需要建立一个文件夹<code>mkdir -p /var/run/sshd</code></p>
+
+<pre><code># /usr/sbin/sshd -D &amp;
+root@fc1936ea8ceb:/# netstat -ntlp
+    Active Internet connections (only servers)
+    Proto Recv-Q Send-Q Local Address           Foreign Address         State       PID/Program name
+    tcp        0      0 0.0.0.0:22              0.0.0.0:*               LISTEN      3238/sshd       
+    tcp6       0      0 :::22                   :::*                    LISTEN      3238/sshd   
+# mkdir root/.ssh
+# vi /root/.ssh/authorized_keys  #把中控机或者常用机器的公钥填进去（如非有中控，推荐以后空着）
+# sed -ri 's/session    required     pam_loginuid.so/#session    required     pam_loginuid.so/g' /etc/pam.d/sshd  #修改 ssh 服务的安全登陆配置
+
+# 启动docker时执行的初始化脚本，这里写的启动ssh。这个应该做成开机启动，这里仅做示例
+# vi /run.sh 
+# chmod +x run.sh
+# cat /run.sh
+   #!/bin/bash
+    /usr/sbin/sshd -D
+</code></pre>
+
+<p>然后我们退出，保存镜像</p>
+
+<pre><code># exit
+$ sudo docker commit  xxxx sshd:ubantu  #xxx为刚才容器的CONTAINER ID
+$ sudo docker  images   # 查看是否有了
+    REPOSITORY          TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+    sshd                ubuntu              7aef2cd95fd0        10 seconds ago      255.2 MB
+    ubuntu              latest              ba5877dc9bec        3 months ago        192.7 MB
+</code></pre>
+
+<p><strong>我们来验证，启动一个container，连docker主机</strong></p>
+
+<pre><code>$ sudo docker  run -p 100:22  -d sshd:ubuntu /run.sh  #启动容器，并映射端口 100 --&gt;22
+    3ad7182aa47f9ce670d933f943fdec946ab69742393ab2116bace72db82b4895
+$ sudo docker ps
+#找一台机器，连过去试试
+
+$ ssh root@xxxx -p 100   #xxxx 是docker主机的ip，100是端口号。  这个跟container启动方式有关
+    。。。。
+    Are you sure you want to continue connecting (yes/no)? yes
+。。。。
+root@3ad7182aa47f:~#
+</code></pre>
+
+<p><strong>成功登陆，镜像创建成功。</strong></p>
+
+<p>run.sh 脚本内容</p>
+
+<h2 id="dockerfile搞:e26601a9b94b90b70d0c8c0bcf072033">dockerfile搞</h2>
+
+<p>首先，创建一个叫做 sshd_ubuntu 的文件夹，用于存放我们的 Dockerfile 、脚本文件、以及其他文件。</p>
+
+<pre><code>$ mkdir sshd_ubuntu
+$ cd sshd_ubuntu/
+$ touch Dockerfile run.sh
+$ ls
+    Dockerfile  run.sh
+</code></pre>
+
+<p>编写 run.sh(启动sshd，同上) 和 authorized_keys（登陆公钥，根据自己情况选择）<code>$ cat ~/.ssh/id_rsa.pub &gt;authorized_keys</code></p>
+
+<p><strong>重点来了，下面是 Dockerfile 的内容</strong></p>
+
+<pre><code>FROM ubuntu:latest  #设置继承镜像
+
+
+MAINTAINER dwj_zz@163.com #作者的信息
+#更改源，根据自己需求，我改的网易的源
+RUN echo &quot;deb http://mirrors.163.com/ubuntu/ trusty main restricted universe multiverse&quot; &gt; /etc/apt/sources.list
+RUN echo &quot;deb http://mirrors.163.com/ubuntu/ trusty-security main restricted universe multiverse&quot; &gt;&gt; /etc/apt/sources.list
+RUN echo &quot;deb http://mirrors.163.com/ubuntu/ trusty-updates main restricted universe multiverse&quot; &gt;&gt; /etc/apt/sources.list
+RUN echo &quot;deb http://mirrors.163.com/ubuntu/ trusty-proposed main restricted universe multiverse&quot; &gt;&gt; /etc/apt/sources.list
+RUN echo &quot;deb http://mirrors.163.com/ubuntu/ trusty-backports main restricted universe multiverse&quot; &gt;&gt; /etc/apt/sources.list
+RUN apt-get update
+
+#安装 ssh 服务
+RUN apt-get install -y openssh-server
+RUN mkdir -p /var/run/sshd
+RUN mkdir -p /root/.ssh
+#取消pam限制
+RUN sed -ri 's/session    required     pam_loginuid.so/#session    required     pam_loginuid.so/g' /etc/pam.d/sshd
+
+#复制配置文件到相应位置,并赋予脚本可执行权限
+ADD authorized_keys /root/.ssh/authorized_keys
+ADD run.sh /run.sh
+RUN chmod 755 /run.sh
+
+#开放端口
+EXPOSE 22
+
+#设置自启动命令
+CMD [&quot;/run.sh&quot;]
+</code></pre>
+
+<p>创建镜像</p>
+
+<pre><code>$ sudo docker build -t sshd:dockerfile .
+    Sending build context to Docker daemon 5.632 kB
+    Sending build context to Docker daemon
+    Step 0 : FROM ubuntu:latest
+     ---&gt; ba5877dc9bec
+    Step 1 : MAINTAINER dwj_zz@163.com
+     ---&gt; Running in 188d74d02d35
+     ---&gt; 473eb019b331
+    Removing intermediate container 188d74d02d35
+    # 使用 Dockerfile 创建，他会帮你删除中间无用的文件层
+    Step 2 : RUN echo &quot;deb http://mirrors.163.com/ubuntu/ trusty main restricted universe multiverse&quot; &gt; /etc/apt/sources.list
+     ---&gt; Running in f52e2a583db5
+     ---&gt; bd4ceef2ee19
+    Removing intermediate container f52e2a583db5
+    Step 3 : RUN echo &quot;deb http://mirrors.163.com/ubuntu/ trusty-security main restricted universe multiverse&quot; &gt;&gt; /etc/apt/sources.list
+......
+    Step 15 : EXPOSE 22
+     ---&gt; Running in 660a57c41b25
+     ---&gt; 3ff9e88c4847
+    Removing intermediate container 660a57c41b25
+    Step 16 : CMD /run.sh
+    ---&gt; Running in 5a0d838b6759
+    ---&gt; 532f12181013
+    Removing intermediate container 5a0d838b6759
+    Successfully built 532f12181013
+</code></pre>
+
+<p>最后，返回告诉我们创建成功，镜像 id 号是532f12181013，让我们来查看下</p>
+
+<pre><code>$ docker images
+REPOSITORY          TAG                 IMAGE ID            CREATED             VIRTUAL     SIZE
+sshd                dockerfile          532f12181013        7 seconds ago       242 MB
+sshd                ubantu              08fdb11b77b5        About an hour ago   229.9 MB
+</code></pre>
+
+<p>最后，测试镜像，运行容器。同上，不在赘述。
+<strong>注意到，后面跟上面手动搞镜像启动命令不一样，不需要在输入命令‘/run.sh’了，因为已经在 Dockerfile 中定义了自启动命令。</strong></p>
+
+  </div>
+  
+  <div class="post">
+    <h1 class="post-title">
       <a href="http://106.186.127.250:1313/blog/docker/%E7%94%A8docker%E8%B5%B7gin%E6%9C%8D%E5%8A%A1/">
         用docker起golang的gin服务
       </a>
@@ -367,85 +590,6 @@ docker save -o go-1.4.img golang:1.4.2   导出镜像
 <p>这样即可跑起来，可curl请求docker主机端口，转发到container进行访问</p>
 
 <pre><code>curl 192.168.99.100:10101/room/
-</code></pre>
-
-  </div>
-  
-  <div class="post">
-    <h1 class="post-title">
-      <a href="http://106.186.127.250:1313/blog/golang/golang%E5%86%99%E6%96%87%E4%BB%B6%E7%9A%844%E4%B8%AD%E6%96%B9%E5%BC%8F/">
-        golang 写文件的4中方式
-      </a>
-    </h1>
-
-    <span class="post-date">Tue, Oct 20, 2015</span>
-
-    <p>package main</p>
-
-<pre><code>import (
-    &quot;bufio&quot;  //缓存IO
-    &quot;fmt&quot;
-    &quot;io/ioutil&quot; //io 工具包
-    &quot;io&quot;
-    &quot;os&quot;
-)
-
-func check(e error) {
-    if e != nil {
-    panic(e)
-    }
-}
-
-func checkFileIsExist(filename string) (bool) {
-    var exist = true;
-    if _, err := os.Stat(filename); os.IsNotExist(err) {
-        exist = false;
-    }
-    return exist;
-}
-
-func main() {
-    var wireteString = &quot;测试n&quot;
-    var filename = &quot;./output1.txt&quot;;
-    var f    *os.File
-    var err1   error;
-
-// 第一种方式: 使用 io.WriteString 写入文件 
-    if checkFileIsExist(filename) {  //如果文件存在
-        f, err1 = os.OpenFile(filename, os.O_APPEND, 0666)  //打开文件
-        fmt.Println(&quot;文件存在&quot;);
-    }else {
-        f, err1 = os.Create(filename)  //创建文件
-        fmt.Println(&quot;文件不存在&quot;);
-    }
-    check(err1)
-    n, err1 := io.WriteString(f, wireteString) //写入文件(字符串)
-    check(err1)
-    fmt.Printf(&quot;写入 %d 个字节n&quot;, n);
-
-//  第二种方式: 使用 ioutil.WriteFile 写入文件 
-    var d1 = []byte(wireteString);
-    err2 := ioutil.WriteFile(&quot;./output2.txt&quot;, d1, 0666)  //写入文件(字节数组)
-    check(err2)
-
-//  第三种方式:  使用 File(Write,WriteString) 写入文件  
-    f, err3 := os.Create(&quot;./output3.txt&quot;)  //创建文件
-    check(err3)
-    defer f.Close()
-    n2, err3 := f.Write(d1)  //写入文件(字节数组)
-    check(err3)
-    fmt.Printf(&quot;写入 %d 个字节n&quot;, n2)
-    n3, err3 := f.WriteString(&quot;writesn&quot;) //写入文件(字节数组)
-    fmt.Printf(&quot;写入 %d 个字节n&quot;, n3)
-    f.Sync()
-
-// 第四种方式:  使用 bufio.NewWriter 写入文件 
-    w := bufio.NewWriter(f)  //创建新的 Writer 对象
-    n4, err3 := w.WriteString(&quot;bufferedn&quot;)
-    fmt.Printf(&quot;写入 %d 个字节n&quot;, n4)
-    w.Flush()
-    f.Close()
-}
 </code></pre>
 
   </div>
@@ -1401,6 +1545,85 @@ func main() {
   
   <div class="post">
     <h1 class="post-title">
+      <a href="http://106.186.127.250:1313/blog/golang/golang%E5%86%99%E6%96%87%E4%BB%B6%E7%9A%844%E4%B8%AD%E6%96%B9%E5%BC%8F/">
+        golang 写文件的4中方式
+      </a>
+    </h1>
+
+    <span class="post-date">Tue, Oct 20, 2015</span>
+
+    <p>package main</p>
+
+<pre><code>import (
+    &quot;bufio&quot;  //缓存IO
+    &quot;fmt&quot;
+    &quot;io/ioutil&quot; //io 工具包
+    &quot;io&quot;
+    &quot;os&quot;
+)
+
+func check(e error) {
+    if e != nil {
+    panic(e)
+    }
+}
+
+func checkFileIsExist(filename string) (bool) {
+    var exist = true;
+    if _, err := os.Stat(filename); os.IsNotExist(err) {
+        exist = false;
+    }
+    return exist;
+}
+
+func main() {
+    var wireteString = &quot;测试n&quot;
+    var filename = &quot;./output1.txt&quot;;
+    var f    *os.File
+    var err1   error;
+
+// 第一种方式: 使用 io.WriteString 写入文件 
+    if checkFileIsExist(filename) {  //如果文件存在
+        f, err1 = os.OpenFile(filename, os.O_APPEND, 0666)  //打开文件
+        fmt.Println(&quot;文件存在&quot;);
+    }else {
+        f, err1 = os.Create(filename)  //创建文件
+        fmt.Println(&quot;文件不存在&quot;);
+    }
+    check(err1)
+    n, err1 := io.WriteString(f, wireteString) //写入文件(字符串)
+    check(err1)
+    fmt.Printf(&quot;写入 %d 个字节n&quot;, n);
+
+//  第二种方式: 使用 ioutil.WriteFile 写入文件 
+    var d1 = []byte(wireteString);
+    err2 := ioutil.WriteFile(&quot;./output2.txt&quot;, d1, 0666)  //写入文件(字节数组)
+    check(err2)
+
+//  第三种方式:  使用 File(Write,WriteString) 写入文件  
+    f, err3 := os.Create(&quot;./output3.txt&quot;)  //创建文件
+    check(err3)
+    defer f.Close()
+    n2, err3 := f.Write(d1)  //写入文件(字节数组)
+    check(err3)
+    fmt.Printf(&quot;写入 %d 个字节n&quot;, n2)
+    n3, err3 := f.WriteString(&quot;writesn&quot;) //写入文件(字节数组)
+    fmt.Printf(&quot;写入 %d 个字节n&quot;, n3)
+    f.Sync()
+
+// 第四种方式:  使用 bufio.NewWriter 写入文件 
+    w := bufio.NewWriter(f)  //创建新的 Writer 对象
+    n4, err3 := w.WriteString(&quot;bufferedn&quot;)
+    fmt.Printf(&quot;写入 %d 个字节n&quot;, n4)
+    w.Flush()
+    f.Close()
+}
+</code></pre>
+
+  </div>
+  
+  <div class="post">
+    <h1 class="post-title">
       <a href="http://106.186.127.250:1313/blog/golang/%E4%B8%80%E8%A1%8C%E5%87%BD%E6%95%B0%E8%A7%A3%E5%86%B3http%E5%8F%91%E9%80%81/">
         【原创】一个函数解决http发送
       </a>
@@ -2297,6 +2520,290 @@ ubroutine: i =  8
     }
     t.Fatalf(“process ran with err %v, want exit status 1″, err)
 }
+</code></pre>
+
+  </div>
+  
+  <div class="post">
+    <h1 class="post-title">
+      <a href="http://106.186.127.250:1313/blog/linux/git/">
+        【转】git 基本概念和用法
+      </a>
+    </h1>
+
+    <span class="post-date">Tue, Oct 20, 2015</span>
+
+    
+
+<p>GIT基本概念和用法总结
+guibin.beijing@gmail.com</p>
+
+<p>在日常使用GIT过程中，经常会出错，比如无意间丢失了未提交的数据，回退版本时丢失了工作目录，等等。经过思考发现，所有这些错误都是因为对 GIT中一些基本的概念模糊而导致，因为对一些基本概念不清晰，导致对GIT每一条命令将会产生的结果不符合预期。下面我就梳理以下我经常碰到的问题相关 的基本概念。</p>
+
+<ol>
+<li><p>Working Directory（工作目录）
+Git的工作目录是保存当前正在工作的文件所在的目录，和working tree是相同的意思。在这个目录中的文件可能会在切换branch时被GIT删除或者替换。这个目录是个临时目录，临时存储你从GIT库中取出的文件，这些文件一直会被保存，直到下次提交。</p></li>
+
+<li><p>GIT Directory（GIT库目录）
+项目的所有历史提交都被保存在了GIT库目录中，只要你不作回滚操作，它应该不会丢失。</p></li>
+
+<li><p>GIT Index（Git索引）
+Git index 可以看作是工作目录和Git库目录之间的暂存区，和staging area是相同的意思。可以使用Git index构建一组你准备一起提交的改变。Git Index和Git Staging area是同一个意思，都是指已经被add的但尚未commit的那些内容所在的区域。最简单的查看目前什么内容在index中的方法是使用git status命令。
+• 命令中”Changes to be committed“中所列的内容是在Index中的内容，commit之后进入Git Directory。
+• 命令中“Changed but not updated”中所列的内容是在Working Directory中的内容，add之后将进入Index。
+• 命令中“Untracked files”中所列的内容是尚未被Git跟踪的内容，add之后进入Index。
+哪些操作能够改变git index中的内容？
+A). git add <path>&hellip;会将working directory中的内容添加进入git index。
+B). git reset HEAD <path>&hellip;会将git index中path内容删除，重新放回working directory中。</p></li>
+
+<li><p>git diff
+git diff可以比较working tree同index之间，index和git directory之间，working tree和git directory之间，git directory中不同commit之间的差异，
+• git diff [<path>&hellip;]：这个命令最常用，在每次add进入index前会运行这个命令，查看即将add进入index时所做的内容修改，即working directory和index的差异。
+• git diff &ndash;cached [<path>&hellip;]：这个命令初学者不太常用，却非常有用，它表示查看已经add进入index但是尚未commit的内容同最后一次commit时的内容的差异。即index和git directory的差异。
+• git diff &ndash;cached [<commit>] [<path>&hellip;]：这个命令初学者用的更少，也非常有用，它表示查看已经add进入index但是尚未commit的内容同指定的<commit>之间的差异，和上面一条很相似，差别仅仅<commit>，即index和git directory中指定版本的差异。
+• git diff <commit> [<path>&hellip;]：这个命令用来查看工作目录和指定<commit>的commit之间的差别，如果要和Git directory中最新版比较差别，则<commit>=HEAD。如果要和某一个branch比较差别，<commit>=分支名字
+• git diff <commit> <commit> [<path>&hellip;]：这个命令用来比较git directory中任意两个<commit>之间的差别，如果想比较任意一个<commit>和最新版的差别，把其中一个<commit>换成HEAD即可。</p></li>
+
+<li><p>如何merge不同的分支
+在git中，在执行任何命令时你一定要清楚，你在哪？对谁执行这个命令？
+比如在创建新的branch时，执行命令：git branch 1.0-beta，这个命令是说在当前branch上，以当前branch为基准，创建一个新的branch，名叫1.0-beta。
+在比如，当merge不同的branch时：
+引用
+git checkout 1.0-beta
+git merge master
+首先切换到1.0-beta branch上，然后将主干（master）上的代码合并到当前1.0-beta分支上。
+merge完后，可能会由冲突，按照git的提示，编辑标识为&rdquo;CONFLICT (content)&ldquo;的文件，解决冲突后再次将冲突的文件add，commit后，merge完毕。</p></li>
+
+<li><p>git reset
+• 在一般使用中，如果发现错误的将不想staging的文件add进入index之后，想回退取消，则可以使用命令：git reset HEAD <file>&hellip;，同时git add完毕之后，git也会做相应的提示，比如：
+引用</p>
+
+<h1 id="changes-to-be-committed:1c1ef82aae62aeea8eedcb5f455b129b">Changes to be committed:</h1>
+
+<p>#   (use &ldquo;git reset HEAD <file>&hellip;&rdquo; to unstage)</p>
+
+<h1 id="new-file-test-scala:1c1ef82aae62aeea8eedcb5f455b129b">new file:   Test.scala</h1>
+
+<p>• git reset [&ndash;hard|soft|mixed|merge|keep] [<commit>或HEAD]： 将当前的分支重设（reset）到指定的<commit>或者HEAD（默认，如果不显示指定commit，默认是HEAD，即最新的一次提 交），并且根据[mode]有可能更新index和working directory。mode的取值可以是hard、soft、mixed、merged、keep。下面来详细说明每种模式的意义和效果。
+A). &ndash;hard：重设（reset） index和working directory，自从<commit>以来在working directory中的任何改变都被丢弃，并把HEAD指向<commit>。
+B). &ndash;soft：index和working directory中的内容不作任何改变，仅仅把HEAD指向<commit>。这个模式的效果是，执行完毕后，自从<commit>以来的所有改变都会显示在git status的&rdquo;Changes to be committed&rdquo;中。
+C). &ndash;mixed：仅reset index，但是不reset working directory。 这个模式是默认模式，即当不显示告知git reset模式时，会使用mixed模式。这个模式的效果是，working directory中文件的修改都会被保留，不会丢弃，但是也不会被标记成&rdquo;Changes to be committed&rdquo;，但是会打出什么还未被更新的报告。报告如下：
+引用
+Unstaged changes after reset:
+M Test.Scala
+M test.txt
+D). &ndash;merge和&ndash;keep用的不多，在下面的例子中说明。</p></li>
+</ol>
+
+<p>下面列出一些git reset的典型的应用场景：
+A) 回滚add操纵
+引用
+$ edit                                     (1)
+$ git add frotz.c filfre.c
+$ mailx                                    (2)
+$ git reset                                (3)
+$ git pull git://info.example.com/ nitfol  (4)</p>
+
+<p>(1) 编辑文件frotz.c, filfre.c，做了些更改，并把更改添加到了index
+(2) 查看邮件，发现某人要你pull，有一些改变需要你merge下来
+(3) 然而，你已经把index搞乱了，因为index同HEAD commit不匹配了，但是你知道，即将pull的东西不会影响已经修改的frotz.c和filfre.c，因此你可以revert这两个文件的改变。 revert后，那些改变应该依旧在working directory中，因此执行git reset。
+(4) 然后，执行了pull之后，自动merge，frotz.c和filfre.c这些改变依然在working directory中。</p>
+
+<p>B) 回滚最近一次commit
+引用
+$ git commit &hellip;
+$ git reset &ndash;soft HEAD^      (1)
+$ edit                        (2)
+$ git commit -a -c ORIG_HEAD  (3)</p>
+
+<p>(1) 当提交了之后，你又发现代码没有提交完整，或者你想重新编辑一下提交的comment，执行git reset &ndash;soft HEAD^，让working tree还跟reset之前一样，不作任何改变。
+HEAD^指向HEAD之前最近的一次commit。
+(2) 对working tree下的文件做修改
+(3) 然后使用reset之前那次commit的注释、作者、日期等信息重新提交。注意，当执行git reset命令时，git会把老的HEAD拷贝到文件.git/ORIG_HEAD中，在命令中可以使用ORIG_HEAD引用这个commit。commit 命令中 -a 参数的意思是告诉git，自动把所有修改的和删除的文件都放进stage area，未被git跟踪的新建的文件不受影响。commit命令中-c <commit> 或者 -C <commit>意思是拿已经提交的commit对象中的信息（作者，提交者，注释，时间戳等）提交，那么这条commit命令的意思就非常清晰了，把所有更改的文件加入stage area，并使用上次的提交信息重新提交。</p>
+
+<p>C) 回滚最近几次commit，并把这几次commit放到叫做topic的branch上去。
+引用
+$ git branch topic/wip     (1)
+$ git reset &ndash;hard HEAD~3  (2)
+$ git checkout topic/wip   (3)
+(1) 你已经提交了一些commit，但是此时发现这些commit还不够成熟，不能进入master分支，但你希望在新的branch上润色这些commit改动。因此执行了git branch命令在当前的HEAD上建立了新的叫做 topic/wip的分支。
+(2) 然后回滚master branch上的最近三次提交。HEAD~3指向当前HEAD-3个commit的commit，git reset &ndash;hard HEAD~3即删除最近的三个commit（删除HEAD, HEAD^, HEAD~2），将HEAD指向HEAD~3。</p>
+
+<p>D) 永久删除最后几个commit
+引用
+$ git commit &hellip;
+$ git reset &ndash;hard HEAD~3   (1)
+(1) 最后三个commit（即HEAD, HEAD^和HEAD~2）提交有问题，你想永久删除这三个commit。</p>
+
+<p>E) 回滚merge和pull操作
+引用
+$ git pull                         (1)
+Auto-merging nitfol
+CONFLICT (content): Merge conflict in nitfol
+Automatic merge failed; fix conflicts and then commit the result.
+$ git reset &ndash;hard                 (2)
+$ git pull . topic/branch          (3)
+Updating from 41223&hellip; to 13134&hellip;
+Fast-forward
+$ git reset &ndash;hard ORIG_HEAD       (4)
+(1) 从origin拉下来一些更新，但是产生了很多冲突，你暂时没有这么多时间去解决这些冲突，因此你决定稍候有空的时候再重新pull。
+(2) 由于pull操作产生了冲突，因此所有pull下来的改变尚未提交，仍然再stage area中，这种情况下git reset &ndash;hard 与 git reset &ndash;hard HEAD意思相同，即都是清除index和working tree中被搞乱的东西。
+(3) 将topic/branch合并到当前的branch，这次没有产生冲突，并且合并后的更改自动提交。
+(4) 但是此时你又发现将topic/branch合并过来为时尚早，因此决定退滚merge，执行git reset &ndash;hard ORIG_HEAD回 滚刚才的pull/merge操作。说明：前面讲过，执行git reset时，git会把reset之前的HEAD放入.git/ORIG_HEAD文件中，命令行中使用ORIG_HEAD引用这个commit。同样 的，执行pull和merge操作时，git都会把执行操作前的HEAD放入ORIG_HEAD中，以防回滚操作。</p>
+
+<p>F) 在被污染的working tree中回滚merge或者pull
+引用
+$ git pull                         (1)
+Auto-merging nitfol
+Merge made by recursive.
+nitfol                |   20 +++++&mdash;-
+&hellip;
+$ git reset &ndash;merge ORIG_HEAD      (2)
+(1) 即便你已经在本地更改了一些你的working tree，你也可安全的git pull，前提是你知道将要pull的内容不会覆盖你的working tree中的内容。
+(2) git pull完后，你发现这次pull下来的修改不满意，想要回滚到pull之前的状态，从前面的介绍知道，我们可以执行git reset &ndash;hard ORIG_HEAD，但是这个命令有个副作用就是清空你的working tree，即丢弃你的本地未add的那些改变。为了避免丢弃working tree中的内容，可以使用git reset &ndash;merge ORIG_HEAD，注意其中的&ndash;hard 换成了 &ndash;merge，这样就可以避免在回滚时清除working tree。</p>
+
+<p>G) 被中断的工作流程
+在实际开发中经常出现这样的情形：你正在开发一个大的feature，此时来了一个紧急的bug需要修复，但是目前在working tree中的内容还没有成型，还不足以commit，但是你又必须切换的另外的branch去fix bug。请看下面的例子
+引用
+$ git checkout feature ;# you were working in &ldquo;feature&rdquo; branch and
+$ work work work       ;# got interrupted
+$ git commit -a -m &ldquo;snapshot WIP&rdquo;                 (1)
+$ git checkout master
+$ fix fix fix
+$ git commit ;# commit with real log
+$ git checkout feature
+$ git reset &ndash;soft HEAD^ ;# go back to WIP state  (2)
+$ git reset                                       (3)
+(1) 这次属于临时提交，因此随便添加一个临时注释即可。
+(2) 这次reset删除了WIP commit，并且把working tree设置成提交WIP快照之前的状态。
+(3) 此时，在index中依然遗留着“snapshot WIP”提交时所做的uncommit changes，git reset将会清理index成为尚未提交&rdquo;snapshot WIP&rdquo;时的状态便于接下来继续工作。</p>
+
+<p>(H) Reset单独的一个文件
+假设你已经添加了一个文件进入index，但是而后又不打算把这个文件提交，此时可以使用git reset把这个文件从index中去除。
+引用
+$ git reset &ndash; frotz.c                      (1)
+$ git commit -m &ldquo;Commit files in index&rdquo;     (2)
+$ git add frotz.c                           (3)
+(1) 把文件frotz.c从index中去除，
+(2) 把index中的文件提交
+(3) 再次把frotz.c加入index</p>
+
+<p>(I) 保留working tree并丢弃一些之前的commit
+假设你正在编辑一些文件，并且已经提交，接着继续工作，但是现在你发现当前在working tree中的内容应该属于另一个branch，与这之前的commit没有什么关系。此时，你可以开启一个新的branch，并且保留着working tree中的内容。
+引用
+$ git tag start
+$ git checkout -b branch1
+$ edit
+$ git commit &hellip;                            (1)
+$ edit
+$ git checkout -b branch2                   (2)
+$ git reset &ndash;keep start                    (3)
+(1) 这次是把在branch1中的改变提交了。
+(2) 此时发现，之前的提交不属于这个branch，此时你新建了branch2，并切换到了branch2上。
+(3) 此时你可以用reset &ndash;keep把在start之后的commit清除掉，但是保持working tree不变。</p>
+
+<ol>
+<li><p>git revert
+git revert用于回滚一些commit。对于一个或者多个已经存在的commit，去除由这些commit引入的改变，并且用一个新的commit来记录这个回滚操作。这个命令要求working tree必须是干净的。
+git revert和git reset的功能很相似，但是有区别，具体如下。
+git revert用于用一个commit来记录并回滚早前的commit，经常是一些错误的提交。如果你想干脆扔掉working tree中的东西，可以使用git reset &ndash;hard
+比如
+A) git revert HEAD~3：丢弃最近的三个commit，把状态恢复到最近的第四个commit，并且提交一个新的commit来记录这次改变。
+B) git revert -n master~5..master~2：丢弃从最近的第五个commit（包含）到第二个（不包含）,但是不自动生成commit，这个revert仅仅修改working tree和index。</p></li>
+
+<li><p>git revert 和 git reset的区别</p></li>
+
+<li><p>git revert是用一次新的commit来回滚之前的commit，git reset是直接删除指定的commit。</p></li>
+
+<li><p>在回滚这一操作上看，效果差不多。但是在日后继续merge以前的老版本时有区别。因为git revert是用一次逆向的commit“中和”之前的提交，因此日后合并老的branch时，导致这部分改变不会再次出现，但是git reset是之间把某些commit在某个branch上删除，因而和老的branch再次merge时，这些被回滚的commit应该还会被引入。</p></li>
+
+<li><p>git reset 是把HEAD向后移动了一下，而git revert是HEAD继续前进，只是新的commit的内容和要revert的内容正好相反，能够抵消要被revert的内容。</p></li>
+
+<li><p>如何删除远程分支
+删除远程分支就是将本地的空分支push到远程即可。
+引用
+#查看远程分支
+$ git ls-remote idc
+Password:
+fa7dc3cd254c6fff683e20722284565b92d869ff HEAD
+14a62709ecadd11a266d234d19955f4679fa95ab refs/heads/cpp-1.0
+34b38625bce0aa4d4a4e266e20bba3e0ccd1b97e refs/heads/cpp-1.0.RC1
+3f40a21f20f51aaa74e2a6954b64d82506cd4adf refs/heads/cpp-1.1
+2f795085d57b6784a6358d97dbd0d1227891b01a refs/heads/distri</p></li>
+</ol>
+
+<p>#删除远程叫做diftri的分支
+$ git push idc :distri
+Password:
+To xxx@192.168.4.40:Project.git
+- [deleted]         distri</p>
+
+<p>#确认远程分支被删除
+$ git ls-remote idc
+Password:
+fa7dc3cd254c6fff683e20722284565b92d869ff HEAD
+14a62709ecadd11a266d234d19955f4679fa95ab refs/heads/cpp-1.0
+34b38625bce0aa4d4a4e266e20bba3e0ccd1b97e refs/heads/cpp-1.0.RC1
+3f40a21f20f51aaa74e2a6954b64d82506cd4adf refs/heads/cpp-1.1</p>
+
+<ol>
+<li><p>如何删除本地分支
+使用git branch命令就可以删除本地分支，比如
+引用
+git branch -d toBeDelBranch</p></li>
+
+<li><p>如何clone（克隆）远程仓库中的指定分支，而非默认的master分支
+在git clone 命令中使用-b参数指定分支名字即可，比如将远端aiotrade.git上的levelIISZ-1.1分支克隆下来：
+引用
+git clone -b levelIISZ-1.1 username@192.168.4.40:aiotrade.git</p></li>
+</ol>
+
+<p>参考文献：
+1. <a href="http://book.git-scm.com/3_basic_branching_and_merging.html">http://book.git-scm.com/3_basic_branching_and_merging.html</a>
+2. git reset &ndash;help
+3. git revert &ndash;help</p>
+
+  </div>
+  
+  <div class="post">
+    <h1 class="post-title">
+      <a href="http://106.186.127.250:1313/blog/%E7%9B%91%E6%8E%A7/%5B%E5%8E%9F%E5%88%9B%5Dconsum-%E5%BC%80%E5%A7%8B%E5%8F%8Aui/">
+        【原创】consul开始及ui
+      </a>
+    </h1>
+
+    <span class="post-date">Tue, Oct 20, 2015</span>
+
+    
+
+<h2 id="consul:ca111de2d7dbbaaa7aaa16407249693a">consul</h2>
+
+<p>执行命令<code>./consul agent -server -bootstrap-expect 1 -data-dir /home/consul -node Litao-MacBook-Pro -dc sz-1 -bind 45.32.21.60 -ui-dir /media/monitor/ui -atlas=ATLAS_USERNAME/demo -atlas-token=xxx</code></p>
+
+<h4 id="注意:ca111de2d7dbbaaa7aaa16407249693a">注意</h4>
+
+<ul>
+<li><code>-ui-dir</code>后面标注的是ui包的地址，也就是index.html所在地址，并且最后的<code>ui/</code>是访问ui的uri。</li>
+<li><code>-atlas=ATLAS_USERNAME/demo -atlas-token=xxx</code>是否必须，还未验证</li>
+</ul>
+
+<h4 id="启动的时候-有些端口是回环地址-我用nginx做代理进行访问:ca111de2d7dbbaaa7aaa16407249693a">启动的时候，有些端口是回环地址，我用nginx做代理进行访问</h4>
+
+<pre><code>    server {
+        listen       80;
+        server_name 45.32.21.60;
+        charset utf-8;
+        access_log  /home/xiaoju/nginx/logs/access.log;
+        root /media/monitor;
+                   index index.html;
+        location / {
+                   proxy_pass http://127.0.0.1:8500;
+          }
+        location /ui {
+                   root /media/monitor;
+                   index index.html;
+          }
+    }
 </code></pre>
 
   </div>
